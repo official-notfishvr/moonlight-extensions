@@ -1,0 +1,87 @@
+{
+  "$schema": "https://moonlight-mod.github.io/manifest.schema.json",
+  "id": "messageLogger",
+  "version": "3.0.0",
+  "apiLevel": 2,
+  "meta": {
+    "name": "Message Logger",
+    "tagline": "Logs deleted and edited messages",
+    "description": "Keeps deleted messages visible and stores edit history so you never miss what was said.",
+    "authors": ["notfishvr"],
+    "source": "https://github.com/notfishvr/moonlight-NoPendingCount",
+    "tags": ["chat", "utility"]
+  },
+  "dependencies": ["contextMenu", "spacepack"],
+  "settings": {
+    "deleteStyle": {
+      "type": "string",
+      "displayName": "Deleted Message Style",
+      "description": "How deleted messages should appear.",
+      "default": "text",
+      "options": [
+        { "label": "Red Text", "value": "text" },
+        { "label": "Red Overlay", "value": "overlay" }
+      ]
+    },
+    "logDeletes": {
+      "type": "boolean",
+      "displayName": "Log Deletes",
+      "description": "Keep deleted messages visible instead of removing them.",
+      "default": true
+    },
+    "logEdits": {
+      "type": "boolean",
+      "displayName": "Log Edits",
+      "description": "Store previous versions of edited messages.",
+      "default": true
+    },
+    "inlineEdits": {
+      "type": "boolean",
+      "displayName": "Inline Edit History",
+      "description": "Show edit history directly under the message.",
+      "default": true
+    },
+    "showEditDiffs": {
+      "type": "boolean",
+      "displayName": "Show Edit Diffs",
+      "description": "Highlight text differences between edit versions.",
+      "default": true
+    },
+    "ignoreBots": {
+      "type": "boolean",
+      "displayName": "Ignore Bots",
+      "description": "Do not log messages from bots.",
+      "default": false
+    },
+    "ignoreSelf": {
+      "type": "boolean",
+      "displayName": "Ignore Self",
+      "description": "Do not log your own messages.",
+      "default": false
+    },
+    "ignoreUsers": {
+      "type": "string",
+      "displayName": "Ignore Users",
+      "description": "Comma-separated list of user IDs to ignore.",
+      "default": ""
+    },
+    "ignoreChannels": {
+      "type": "string",
+      "displayName": "Ignore Channels",
+      "description": "Comma-separated list of channel IDs to ignore.",
+      "default": ""
+    },
+    "ignoreGuilds": {
+      "type": "string",
+      "displayName": "Ignore Guilds",
+      "description": "Comma-separated list of guild IDs to ignore.",
+      "default": ""
+    },
+    "collapseDeleted": {
+      "type": "boolean",
+      "displayName": "Collapse Deleted",
+      "description": "Group deleted messages similar to blocked messages.",
+      "default": false
+    }
+  }
+}

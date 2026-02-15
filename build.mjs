@@ -26,5 +26,16 @@ if (clean) {
     } else {
       await buildExt(cfg);
     }
+
+    const srcDir = path.join("src", ext);
+    const outDir = path.join("dist", ext);
+    if (fs.existsSync(srcDir) && fs.existsSync(outDir)) {
+      const entries = fs.readdirSync(srcDir, { withFileTypes: true });
+      for (const e of entries) {
+        if (e.isFile() && e.name.endsWith(".css")) {
+          fs.copyFileSync(path.join(srcDir, e.name), path.join(outDir, e.name));
+        }
+      }
+    }
   }
 }
