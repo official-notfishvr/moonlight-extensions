@@ -17,6 +17,25 @@ declare module "@moonlight-mod/wp/messageLogger_diffUtils" {
   export function createMessageDiff(previousContent: string, currentContent: string): DiffPart[];
 }
 
+declare module "@moonlight-mod/wp/messageClickActions_main" {
+  export function onMessageClick(event: MouseEvent, props: any): void;
+}
+
+declare module "@moonlight-mod/wp/moreUserTags_main" {
+  export const localTags: Record<string, number> & Record<number, string>;
+  export function getTagText(tagName: string): string;
+  export function getTag(opts: {
+    message?: unknown;
+    user?: unknown;
+    channel?: unknown;
+    channelId?: string;
+    isChat?: boolean;
+  }): number | null;
+  export function renderMessageDecoration(props: { message: unknown }): React.ReactNode;
+  export function renderNicknameIcon(props: { userId: string }): React.ReactNode;
+  export function renderMemberListDecorator(props: { user: unknown }): React.ReactNode;
+}
+
 declare module "@moonlight-mod/wp/messageLogger_main" {
   export function handleDelete(
     cache: unknown,

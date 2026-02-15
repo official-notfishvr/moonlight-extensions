@@ -1,0 +1,14 @@
+{
+  "$schema": "https://moonlight-mod.github.io/manifest.schema.json",
+  "id": "voiceDownload",
+  "version": "1.0.0",
+  "apiLevel": 2,
+  "meta": {
+    "name": "Voice Download",
+    "tagline": "Adds a download button to voice messages.",
+    "description": "Adds a download button to voice messages. [ported from Vencord]",
+    "authors": ["notfishvr"],
+    "tags": ["audio", "utils"]
+  },
+  "dependencies": ["spacepack"]
+}

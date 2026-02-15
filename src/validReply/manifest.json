@@ -1,0 +1,15 @@
+{
+  "$schema": "https://moonlight-mod.github.io/manifest.schema.json",
+  "id": "validReply",
+  "version": "1.0.0",
+  "apiLevel": 2,
+  "meta": {
+    "name": "Valid Reply",
+    "tagline": "Fix broken reply references.",
+    "description": "Fixes 'Message could not be loaded' upon hovering over a reply by fetching the referenced message from the API. [ported from Vencord]",
+    "authors": ["notfishvr"],
+    "source": "https://github.com/official-notfishvr/moonlight-extensions",
+    "tags": ["chat", "fixes"]
+  },
+  "dependencies": ["spacepack"]
+}

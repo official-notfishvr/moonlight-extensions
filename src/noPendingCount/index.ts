@@ -7,7 +7,6 @@ function getSetting<T>(name: string): T | undefined {
 }
 
 export const patches: ExtensionWebExports["patches"] = [
-  // Friend requests count
   {
     find: "getPendingCount(){",
     prerequisite: () => getSetting<boolean>("hideFriendRequestsCount") ?? true,
@@ -16,7 +15,6 @@ export const patches: ExtensionWebExports["patches"] = [
       replacement: "return 0;"
     }
   },
-  // Message requests count
   {
     find: "getMessageRequestsCount(){",
     prerequisite: () => getSetting<boolean>("hideMessageRequestsCount") ?? true,
@@ -25,7 +23,6 @@ export const patches: ExtensionWebExports["patches"] = [
       replacement: "return 0;"
     }
   },
-  // Message Requests tab visibility - only the red badge is hidden, not the tab
   {
     find: ".getSpamChannelsCount();return",
     prerequisite: () => getSetting<boolean>("hideMessageRequestsCount") ?? true,
@@ -34,7 +31,6 @@ export const patches: ExtensionWebExports["patches"] = [
       replacement: (_, store) => `require("noPendingCount_messageRequestHelper").getRealMessageRequestCount(${store})`
     }
   },
-  // Nitro offers count
   {
     find: "showProgressBadge:",
     prerequisite: () => getSetting<boolean>("hidePremiumOffersCount") ?? true,

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://moonlight-mod.github.io/manifest.schema.json",
+  "id": "mutualGroupDMs",
+  "version": "1.0.0",
+  "apiLevel": 2,
+  "meta": {
+    "name": "Mutual Group DMs",
+    "tagline": "Shows mutual group dms in profiles",
+    "description": "Displays a list of group DMs you have in common with a user in their profile modal. [ported from Vencord]",
+    "authors": ["notfishvr"],
+    "source": "https://github.com/official-notfishvr/moonlight-extensions",
+    "tags": ["profiles", "qol"]
+  },
+  "dependencies": ["spacepack"]
+}

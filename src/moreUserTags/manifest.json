@@ -1,0 +1,162 @@
+{
+  "$schema": "https://moonlight-mod.github.io/manifest.schema.json",
+  "id": "moreUserTags",
+  "version": "1.0.0",
+  "apiLevel": 2,
+  "meta": {
+    "name": "More User Tags",
+    "tagline": "Adds tags for webhooks and moderative roles (owner, admin, etc.)",
+    "description": "Displays additional user tags in chat and member lists based on server permissions. Supports Owner, Admin, Staff, Mod, VC Mod, Chat Mod, and Webhook tags with customizable text and visibility. [ported from Vencord]",
+    "authors": ["notfishvr"],
+    "source": "https://github.com/official-notfishvr/moonlight-extensions",
+    "tags": ["chat", "qol"]
+  },
+  "dependencies": ["spacepack"],
+  "settings": {
+    "dontShowForBots": {
+      "type": "boolean",
+      "displayName": "Don't Show for Bots",
+      "description": "Don't show extra tags for bots (excluding webhooks)",
+      "default": false
+    },
+    "dontShowBotTag": {
+      "type": "boolean",
+      "displayName": "Only Show Extra Tags for Bots",
+      "description": "Only show extra tags for bots / Hide [APP] text",
+      "default": false,
+      "advice": "restart"
+    },
+    "showWebhookTagFully": {
+      "type": "boolean",
+      "displayName": "Show Webhook Tag in Followed Channels",
+      "description": "Show Webhook tag in followed channels like announcements",
+      "default": false
+    },
+    "tagText_WEBHOOK": {
+      "type": "string",
+      "displayName": "Webhook Tag Text",
+      "description": "Text displayed on the Webhook tag",
+      "default": "Webhook"
+    },
+    "tagText_OWNER": {
+      "type": "string",
+      "displayName": "Owner Tag Text",
+      "description": "Text displayed on the Owner tag",
+      "default": "Owner"
+    },
+    "tagText_ADMINISTRATOR": {
+      "type": "string",
+      "displayName": "Admin Tag Text",
+      "description": "Text displayed on the Admin tag",
+      "default": "Admin"
+    },
+    "tagText_MODERATOR_STAFF": {
+      "type": "string",
+      "displayName": "Staff Tag Text",
+      "description": "Text displayed on the Staff tag",
+      "default": "Staff"
+    },
+    "tagText_MODERATOR": {
+      "type": "string",
+      "displayName": "Mod Tag Text",
+      "description": "Text displayed on the Mod tag",
+      "default": "Mod"
+    },
+    "tagText_VOICE_MODERATOR": {
+      "type": "string",
+      "displayName": "VC Mod Tag Text",
+      "description": "Text displayed on the VC Mod tag",
+      "default": "VC Mod"
+    },
+    "tagText_CHAT_MODERATOR": {
+      "type": "string",
+      "displayName": "Chat Mod Tag Text",
+      "description": "Text displayed on the Chat Mod tag",
+      "default": "Chat Mod"
+    },
+    "showInChat_WEBHOOK": {
+      "type": "boolean",
+      "displayName": "Show Webhook in Chat",
+      "description": "Show the Webhook tag in messages",
+      "default": true
+    },
+    "showInChat_OWNER": {
+      "type": "boolean",
+      "displayName": "Show Owner in Chat",
+      "description": "Show the Owner tag in messages",
+      "default": true
+    },
+    "showInChat_ADMINISTRATOR": {
+      "type": "boolean",
+      "displayName": "Show Admin in Chat",
+      "description": "Show the Admin tag in messages",
+      "default": true
+    },
+    "showInChat_MODERATOR_STAFF": {
+      "type": "boolean",
+      "displayName": "Show Staff in Chat",
+      "description": "Show the Staff tag in messages",
+      "default": true
+    },
+    "showInChat_MODERATOR": {
+      "type": "boolean",
+      "displayName": "Show Mod in Chat",
+      "description": "Show the Mod tag in messages",
+      "default": true
+    },
+    "showInChat_VOICE_MODERATOR": {
+      "type": "boolean",
+      "displayName": "Show VC Mod in Chat",
+      "description": "Show the VC Mod tag in messages",
+      "default": true
+    },
+    "showInChat_CHAT_MODERATOR": {
+      "type": "boolean",
+      "displayName": "Show Chat Mod in Chat",
+      "description": "Show the Chat Mod tag in messages",
+      "default": true
+    },
+    "showOutsideChat_WEBHOOK": {
+      "type": "boolean",
+      "displayName": "Show Webhook Outside Chat",
+      "description": "Show the Webhook tag in member list and profiles",
+      "default": true
+    },
+    "showOutsideChat_OWNER": {
+      "type": "boolean",
+      "displayName": "Show Owner Outside Chat",
+      "description": "Show the Owner tag in member list and profiles",
+      "default": true
+    },
+    "showOutsideChat_ADMINISTRATOR": {
+      "type": "boolean",
+      "displayName": "Show Admin Outside Chat",
+      "description": "Show the Admin tag in member list and profiles",
+      "default": true
+    },
+    "showOutsideChat_MODERATOR_STAFF": {
+      "type": "boolean",
+      "displayName": "Show Staff Outside Chat",
+      "description": "Show the Staff tag in member list and profiles",
+      "default": true
+    },
+    "showOutsideChat_MODERATOR": {
+      "type": "boolean",
+      "displayName": "Show Mod Outside Chat",
+      "description": "Show the Mod tag in member list and profiles",
+      "default": true
+    },
+    "showOutsideChat_VOICE_MODERATOR": {
+      "type": "boolean",
+      "displayName": "Show VC Mod Outside Chat",
+      "description": "Show the VC Mod tag in member list and profiles",
+      "default": true
+    },
+    "showOutsideChat_CHAT_MODERATOR": {
+      "type": "boolean",
+      "displayName": "Show Chat Mod Outside Chat",
+      "description": "Show the Chat Mod tag in member list and profiles",
+      "default": true
+    }
+  }
+}

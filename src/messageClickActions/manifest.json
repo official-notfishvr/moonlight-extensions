@@ -1,0 +1,223 @@
+{
+  "$schema": "https://moonlight-mod.github.io/manifest.schema.json",
+  "id": "messageClickActions",
+  "version": "1.0.0",
+  "apiLevel": 2,
+  "meta": {
+    "name": "Message Click Actions",
+    "tagline": "Customize click actions on messages.",
+    "description": "Assign single-click, double-click, and triple-click actions to messages with optional modifier keys. Supports delete, copy link, copy ID, copy content, copy user ID, edit, reply, react, quote, pin, and more. [ported from Vencord/Equicord]",
+    "authors": ["notfishvr"],
+    "source": "https://github.com/official-notfishvr/moonlight-extensions",
+    "tags": ["chat", "qol"]
+  },
+  "dependencies": ["spacepack"],
+  "settings": {
+    "reactEmoji": {
+      "type": "string",
+      "displayName": "React Emoji",
+      "description": "Emoji to use for react actions",
+      "default": "💀"
+    },
+    "singleClickAction": {
+      "type": "select",
+      "displayName": "Single Click Action (Own)",
+      "description": "Action on single click (your messages)",
+      "default": "DELETE",
+      "options": [
+        { "label": "None", "value": "NONE" },
+        { "label": "Delete", "value": "DELETE" },
+        { "label": "Copy Link", "value": "COPY_LINK" },
+        { "label": "Copy ID", "value": "COPY_ID" },
+        { "label": "Copy Content", "value": "COPY_CONTENT" },
+        { "label": "Copy User ID", "value": "COPY_USER_ID" },
+        { "label": "Edit", "value": "EDIT" },
+        { "label": "Reply", "value": "REPLY" },
+        { "label": "React", "value": "REACT" },
+        { "label": "Open Thread", "value": "OPEN_THREAD" },
+        { "label": "Open Tab", "value": "OPEN_TAB" }
+      ]
+    },
+    "singleClickModifier": {
+      "type": "select",
+      "displayName": "Single Click Modifier (Own)",
+      "description": "Modifier required for single click action (your messages)",
+      "default": "BACKSPACE",
+      "options": [
+        { "label": "Backspace", "value": "BACKSPACE" },
+        { "label": "Delete", "value": "DELETE" },
+        { "label": "None", "value": "NONE" },
+        { "label": "Shift", "value": "SHIFT" },
+        { "label": "Ctrl", "value": "CTRL" },
+        { "label": "Alt", "value": "ALT" }
+      ]
+    },
+    "singleClickOthersAction": {
+      "type": "select",
+      "displayName": "Single Click Action (Others)",
+      "description": "Action on single click (others' messages)",
+      "default": "DELETE",
+      "options": [
+        { "label": "None", "value": "NONE" },
+        { "label": "Delete", "value": "DELETE" },
+        { "label": "Copy Link", "value": "COPY_LINK" },
+        { "label": "Copy ID", "value": "COPY_ID" },
+        { "label": "Copy Content", "value": "COPY_CONTENT" },
+        { "label": "Copy User ID", "value": "COPY_USER_ID" },
+        { "label": "Edit", "value": "EDIT" },
+        { "label": "Reply", "value": "REPLY" },
+        { "label": "React", "value": "REACT" },
+        { "label": "Open Thread", "value": "OPEN_THREAD" },
+        { "label": "Open Tab", "value": "OPEN_TAB" }
+      ]
+    },
+    "singleClickOthersModifier": {
+      "type": "select",
+      "displayName": "Single Click Modifier (Others)",
+      "description": "Modifier required for single click action (others' messages)",
+      "default": "BACKSPACE",
+      "options": [
+        { "label": "Backspace", "value": "BACKSPACE" },
+        { "label": "Delete", "value": "DELETE" },
+        { "label": "None", "value": "NONE" },
+        { "label": "Shift", "value": "SHIFT" },
+        { "label": "Ctrl", "value": "CTRL" },
+        { "label": "Alt", "value": "ALT" }
+      ]
+    },
+    "doubleClickAction": {
+      "type": "select",
+      "displayName": "Double Click Action (Own)",
+      "description": "Action on double-click (your messages)",
+      "default": "EDIT",
+      "options": [
+        { "label": "None", "value": "NONE" },
+        { "label": "Delete", "value": "DELETE" },
+        { "label": "Reply", "value": "REPLY" },
+        { "label": "Edit", "value": "EDIT" },
+        { "label": "Quote", "value": "QUOTE" },
+        { "label": "Copy Content", "value": "COPY_CONTENT" },
+        { "label": "Copy Link", "value": "COPY_LINK" },
+        { "label": "Copy ID", "value": "COPY_ID" },
+        { "label": "Copy User ID", "value": "COPY_USER_ID" },
+        { "label": "React", "value": "REACT" },
+        { "label": "Pin", "value": "PIN" }
+      ]
+    },
+    "doubleClickOthersAction": {
+      "type": "select",
+      "displayName": "Double Click Action (Others)",
+      "description": "Action on double-click (others' messages)",
+      "default": "REPLY",
+      "options": [
+        { "label": "None", "value": "NONE" },
+        { "label": "Delete", "value": "DELETE" },
+        { "label": "Reply", "value": "REPLY" },
+        { "label": "Quote", "value": "QUOTE" },
+        { "label": "Copy Content", "value": "COPY_CONTENT" },
+        { "label": "Copy Link", "value": "COPY_LINK" },
+        { "label": "Copy ID", "value": "COPY_ID" },
+        { "label": "Copy User ID", "value": "COPY_USER_ID" },
+        { "label": "React", "value": "REACT" },
+        { "label": "Pin", "value": "PIN" }
+      ]
+    },
+    "doubleClickModifier": {
+      "type": "select",
+      "displayName": "Double Click Modifier",
+      "description": "Modifier required for double-click action",
+      "default": "NONE",
+      "options": [
+        { "label": "None", "value": "NONE" },
+        { "label": "Shift", "value": "SHIFT" },
+        { "label": "Ctrl", "value": "CTRL" },
+        { "label": "Alt", "value": "ALT" }
+      ]
+    },
+    "tripleClickAction": {
+      "type": "select",
+      "displayName": "Triple Click Action",
+      "description": "Action on triple-click",
+      "default": "REACT",
+      "options": [
+        { "label": "None", "value": "NONE" },
+        { "label": "Delete", "value": "DELETE" },
+        { "label": "Copy Link", "value": "COPY_LINK" },
+        { "label": "Copy ID", "value": "COPY_ID" },
+        { "label": "Copy Content", "value": "COPY_CONTENT" },
+        { "label": "Copy User ID", "value": "COPY_USER_ID" },
+        { "label": "Edit", "value": "EDIT" },
+        { "label": "Reply", "value": "REPLY" },
+        { "label": "React", "value": "REACT" },
+        { "label": "Open Thread", "value": "OPEN_THREAD" },
+        { "label": "Open Tab", "value": "OPEN_TAB" }
+      ]
+    },
+    "tripleClickModifier": {
+      "type": "select",
+      "displayName": "Triple Click Modifier",
+      "description": "Modifier required for triple-click action",
+      "default": "NONE",
+      "options": [
+        { "label": "None", "value": "NONE" },
+        { "label": "Shift", "value": "SHIFT" },
+        { "label": "Ctrl", "value": "CTRL" },
+        { "label": "Alt", "value": "ALT" }
+      ]
+    },
+    "disableInDms": {
+      "type": "boolean",
+      "displayName": "Disable in DMs",
+      "description": "Disable all click actions in direct messages",
+      "default": false
+    },
+    "disableInSystemDms": {
+      "type": "boolean",
+      "displayName": "Disable in System DMs",
+      "description": "Disable all click actions in system DMs",
+      "default": true
+    },
+    "clickTimeout": {
+      "type": "number",
+      "displayName": "Click Timeout",
+      "description": "Timeout to distinguish double/triple clicks (ms)",
+      "default": 300,
+      "min": 100,
+      "max": 500
+    },
+    "doubleClickHoldThreshold": {
+      "type": "number",
+      "displayName": "Double Click Hold Threshold",
+      "description": "Max hold time for double-click actions (ms). Holding longer allows text selection",
+      "default": 150,
+      "min": 50,
+      "max": 500
+    },
+    "deferDoubleClickForTriple": {
+      "type": "boolean",
+      "displayName": "Defer Double Click for Triple",
+      "description": "Delay double-click to allow triple-click actions (disables triple-click when off)",
+      "default": true
+    },
+    "selectionHoldTimeout": {
+      "type": "number",
+      "displayName": "Selection Hold Timeout",
+      "description": "Timeout to allow text selection (ms)",
+      "default": 300,
+      "min": 100,
+      "max": 1000
+    },
+    "quoteWithReply": {
+      "type": "boolean",
+      "displayName": "Quote with Reply",
+      "description": "When quoting, also reply to the message",
+      "default": true
+    },
+    "useSelectionForQuote": {
+      "type": "boolean",
+      "displayName": "Use Selection for Quote",
+      "description": "When quoting, use selected text if available",
+      "default": false
+    }
+  }
+}

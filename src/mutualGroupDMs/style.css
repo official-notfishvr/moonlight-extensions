@@ -1,0 +1,71 @@
+.vc-mutual-gdms-modal-tab-bar {
+  gap: 0;
+}
+
+.vc-mutual-gdms-modal-v2-tab-bar {
+  --space-xl: 16px;
+}
+
+.mgdm-tab {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  padding: 0 4px;
+  margin-right: 4px;
+  color: var(--interactive-normal);
+  line-height: normal;
+  display: flex;
+  align-items: center;
+}
+
+.mgdm-tab:hover {
+  color: var(--interactive-hover);
+}
+
+.mgdm-active-tab {
+  color: var(--interactive-active) !important;
+  border-bottom: 2px solid var(--control-brand-foreground) !important;
+}
+
+.mgdm-row {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  cursor: pointer;
+  border-radius: 8px;
+}
+
+.mgdm-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  margin-right: 12px;
+}
+
+.mgdm-details {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex: 1;
+}
+
+.mgdm-name {
+  font-weight: 600;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#mgdm-container {
+  height: 100% !important;
+  width: 100% !important;
+  z-index: 100 !important;
+  position: relative !important;
+  background: var(--background-primary) !important;
+}
+
+.mgdm-scroller {
+  height: 100% !important;
+}

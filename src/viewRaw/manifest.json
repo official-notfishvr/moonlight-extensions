@@ -1,0 +1,16 @@
+{
+  "$schema": "https://moonlight-mod.github.io/manifest.schema.json",
+  "id": "viewRaw",
+  "version": "1.0.0",
+  "apiLevel": 2,
+  "meta": {
+    "name": "View Raw",
+    "tagline": "View raw JSON data of messages, channels, guilds, users, and roles.",
+    "description": "Copy and view the raw content/data of any message, channel, guild, user, or role via context menus. [ported from Vencord]",
+    "authors": ["notfishvr"],
+    "source": "https://github.com/official-notfishvr/moonlight-extensions",
+    "tags": ["chat", "qol"]
+  },
+  "dependencies": ["spacepack", "contextMenu"],
+  "settings": {}
+}

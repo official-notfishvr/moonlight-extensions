@@ -1,0 +1,15 @@
+{
+  "$schema": "https://moonlight-mod.github.io/manifest.schema.json",
+  "id": "validUser",
+  "version": "1.0.0",
+  "apiLevel": 2,
+  "meta": {
+    "name": "Valid User",
+    "tagline": "Fix unknown user mentions.",
+    "description": "Fixes mentions for unknown users showing up as '@unknown-user' by fetching user data on hover. [ported from Vencord]",
+    "authors": ["notfishvr"],
+    "source": "https://github.com/official-notfishvr/moonlight-extensions",
+    "tags": ["chat", "fixes"]
+  },
+  "dependencies": ["spacepack"]
+}
