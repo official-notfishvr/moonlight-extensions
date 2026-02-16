@@ -215,7 +215,6 @@ async function getUser(id: string) {
     return userObj;
   } catch (e: any) {
     if (e?.status === 429) throw e;
-    console.error("[ValidUser] Failed to fetch user:", e);
     return null;
   }
 }
@@ -301,5 +300,3 @@ export function renderMention(RoleMention: any, UserMention: any, data: any, par
     props
   });
 }
-
-console.log("[ValidUser] Extension loaded.");

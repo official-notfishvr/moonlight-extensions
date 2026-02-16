@@ -28,7 +28,7 @@ export const patches: ExtensionWebExports["patches"] = [
     prerequisite: () => getSetting<boolean>("hideMessageRequestsCount") ?? true,
     replace: {
       match: /(?<=getSpamChannelsCount\(\);return )(\i)\.getMessageRequestsCount\(\)/,
-      replacement: (_, store) => `require("noPendingCount_messageRequestHelper").getRealMessageRequestCount(${store})`
+      replacement: (_, store) => `${store}.getMessageRequestChannelIds().size`
     }
   },
   {
@@ -40,7 +40,3 @@ export const patches: ExtensionWebExports["patches"] = [
     }
   }
 ];
-
-export const webpackModules: ExtensionWebExports["webpackModules"] = {
-  messageRequestHelper: {}
-};

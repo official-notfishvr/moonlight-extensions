@@ -214,9 +214,7 @@ function insertTextIntoChatInput(text: string) {
       selection.addRange(range);
     }
     document.execCommand("insertText", false, text);
-  } catch (e) {
-    console.error("[MessageClickActions] Failed to insert text:", e);
-  }
+  } catch (e) {}
 }
 
 async function toggleReaction(channelId: string, messageId: string, emoji: string, channel: any, msg: any) {
@@ -264,14 +262,10 @@ async function toggleReaction(channelId: string, messageId: string, emoji: strin
         headers: { Authorization: token, "Content-Type": "application/json" }
       });
       if (!resp.ok) {
-        console.error("[MessageClickActions] Reaction API returned", resp.status);
       }
     } else {
-      console.warn("[MessageClickActions] Could not get auth token for reaction");
     }
-  } catch (e) {
-    console.error("[MessageClickActions] Failed to toggle reaction:", e);
-  }
+  } catch (e) {}
 }
 
 function copyLink(msg: any, channel: any) {
@@ -295,9 +289,7 @@ function togglePin(channel: any, msg: any) {
     } else {
       PinActions?.pinMessage?.(channel, msg.id);
     }
-  } catch (e) {
-    console.error("[MessageClickActions] Failed to toggle pin:", e);
-  }
+  } catch (e) {}
 }
 
 function quoteMessage(channel: any, msg: any) {
@@ -384,23 +376,14 @@ async function executeAction(action: ClickAction, msg: any, channel: any, event:
 
     case "EDIT":
       if (!isMe) {
-        console.log("[MessageClickActions] EDIT skipped: not own message");
         return;
       }
       if (_EditMessageStore?.isEditing?.(channel.id, msg.id)) {
-        console.log("[MessageClickActions] EDIT skipped: already editing");
         return;
       }
       if (msg.state && msg.state !== "SENT") {
-        console.log("[MessageClickActions] EDIT skipped: state =", msg.state);
         return;
       }
-      console.log(
-        "[MessageClickActions] Executing EDIT action. MessageActions:",
-        !!_MessageActions,
-        "startEditMessage:",
-        typeof _MessageActions?.startEditMessage
-      );
       if (_MessageActions?.startEditMessage) {
         _MessageActions.startEditMessage(channel.id, msg.id, msg.content);
       } else {
@@ -510,21 +493,6 @@ export function onMessageClick(event: MouseEvent, props: any) {
     const myId = getCurrentUserId();
     const isMe = msg.author?.id === myId;
 
-    if (myId) {
-      console.log(
-        "[MessageClickActions] myId:",
-        myId,
-        "author:",
-        msg.author?.id,
-        "isMe:",
-        isMe,
-        "detail:",
-        event.detail
-      );
-    } else {
-      console.warn("[MessageClickActions] Could not get current user ID! UserStore:", _UserStore);
-    }
-
     const isDM = channel.isDM?.() ?? false;
     const isSystemDM = channel.isSystemDM?.() ?? false;
     if (
@@ -580,7 +548,6 @@ export function onMessageClick(event: MouseEvent, props: any) {
       if (!canSend(channel)) return;
       if (msg.deleted) return;
 
-      console.log("[MessageClickActions] Double-click detected, action:", doubleClickAction);
       executeAction(doubleClickAction, msg, channel, event);
       event.preventDefault();
       return;
@@ -603,9 +570,7 @@ export function onMessageClick(event: MouseEvent, props: any) {
         }
       }
     }
-  } catch (e) {
-    console.error("[MessageClickActions] Error in click handler:", e);
-  }
+  } catch (e) {}
 }
 
 document.addEventListener("keydown", keydown);

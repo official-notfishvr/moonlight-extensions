@@ -1,12 +1,12 @@
 {
   "$schema": "https://moonlight-mod.github.io/manifest.schema.json",
   "id": "noPendingCount",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "apiLevel": 2,
   "meta": {
     "name": "No Pending Count",
     "tagline": "Removes the ping count of incoming friend requests, message requests, and nitro offers.",
-    "description": "Removes the badge count indicators for incoming friend requests, message requests, and Nitro offers. Each can be toggled individually in settings. [ported form vencord]",
+    "description": "Removes the badge count indicators for incoming friend requests, message requests, and Nitro offers. Each can be toggled individually in settings. Ported from [Vencord noPendingCount made by amia](https://github.com/Vendicated/Vencord/tree/main/src/plugins/noPendingCount).",
     "authors": ["notfishvr"],
     "source": "https://github.com/official-notfishvr/moonlight-extensions"
   },
@@ -16,21 +16,21 @@
       "displayName": "Hide friend requests count",
       "description": "Hide incoming friend requests count",
       "default": true,
-      "advice": "restart"
+      "advice": "reload"
     },
     "hideMessageRequestsCount": {
       "type": "boolean",
       "displayName": "Hide message requests count",
       "description": "Hide message requests count",
       "default": true,
-      "advice": "restart"
+      "advice": "reload"
     },
     "hidePremiumOffersCount": {
       "type": "boolean",
       "displayName": "Hide Nitro offers count",
       "description": "Hide nitro offers count",
       "default": true,
-      "advice": "restart"
+      "advice": "reload"
     }
   }
 }

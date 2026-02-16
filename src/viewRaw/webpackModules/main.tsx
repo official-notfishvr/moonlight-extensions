@@ -32,9 +32,7 @@ function copyWithToast(text: string, msg?: string) {
   copyToClipboard(text);
   try {
     showToast(createToast(msg ?? "Copied to clipboard!", 0));
-  } catch {
-    console.log("[ViewRaw] " + (msg ?? "Copied to clipboard!"));
-  }
+  } catch {}
 }
 
 function sortObject<T extends object>(obj: T): T {

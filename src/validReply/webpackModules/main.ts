@@ -39,9 +39,7 @@ function ensureCreateMessageRecord() {
         }
       }
     }
-  } catch (e) {
-    console.error("[ValidReply] Failed to find createMessageRecord:", e);
-  }
+  } catch (e) {}
 }
 
 async function getToken(): Promise<string | null> {
@@ -55,7 +53,6 @@ async function getToken(): Promise<string | null> {
 
 export function setReplyStore(store: any) {
   ReplyStore = store;
-  console.log("[ValidReply] ReplyStore captured.");
 }
 
 export async function fetchReply(reply: any) {
@@ -72,7 +69,6 @@ export async function fetchReply(reply: any) {
   try {
     const token = await getToken();
     if (!token) {
-      console.warn("[ValidReply] Could not get auth token");
       return;
     }
 
@@ -81,7 +77,6 @@ export async function fetchReply(reply: any) {
     });
 
     if (!resp.ok) {
-      console.error("[ValidReply] API returned", resp.status);
       return;
     }
 
@@ -117,10 +112,7 @@ export async function fetchReply(reply: any) {
       });
     }
   } catch (e) {
-    console.error("[ValidReply] Failed to fetch reply:", e);
   } finally {
     fetching.delete(messageId);
   }
 }
-
-console.log("[ValidReply] Extension loaded.");
