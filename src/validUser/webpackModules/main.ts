@@ -1,8 +1,18 @@
-import Dispatcher from "@moonlight-mod/wp/discord/Dispatcher";
 import spacepack from "@moonlight-mod/wp/spacepack_spacepack";
 import React from "@moonlight-mod/wp/react";
 
 function findStore(name: string): any {
+  try {
+    const mappedId = `discord/stores/${name}`;
+    if (!(mappedId in (spacepack.modules ?? {})) && !(mappedId in (spacepack.cache ?? {}))) throw new Error();
+    const mapped = spacepack.require(mappedId);
+    const mappedExport = mapped?.default ?? mapped;
+    if (mappedExport?.getName?.() === name) return mappedExport;
+    for (const key of Object.keys(mappedExport ?? {})) {
+      if (mappedExport[key]?.getName?.() === name) return mappedExport[key];
+    }
+  } catch {}
+
   try {
     const mod = spacepack.findByCode(`"${name}"`)[0].exports;
     if (mod?.default?.getName?.() === name) return mod.default;
@@ -18,6 +28,21 @@ function findStore(name: string): any {
 
 let _UserStore: any = null;
 let _UserProfileStore: any = null;
+let _Dispatcher: any = null;
+
+function getDispatcher(): any {
+  if (_Dispatcher) return _Dispatcher;
+  try {
+    if (!("discord/Dispatcher" in (spacepack.modules ?? {})) && !("discord/Dispatcher" in (spacepack.cache ?? {}))) {
+      return null;
+    }
+    const mod = spacepack.require("discord/Dispatcher");
+    _Dispatcher = mod?.default ?? mod;
+  } catch {
+    _Dispatcher = null;
+  }
+  return _Dispatcher;
+}
 
 function ensureStores() {
   if (!_UserStore) _UserStore = findStore("UserStore");
@@ -180,12 +205,12 @@ async function getUser(id: string) {
 
     const user = await resp.json();
 
-    Dispatcher.dispatch({
+    getDispatcher()?.dispatch?.({
       type: "USER_UPDATE",
       user: user
     });
 
-    await Dispatcher.dispatch({
+    await getDispatcher()?.dispatch?.({
       type: "USER_PROFILE_FETCH_FAILURE",
       userId: id
     });

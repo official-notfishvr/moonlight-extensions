@@ -4,13 +4,11 @@ import {
   ModalHeader,
   ModalContent,
   ModalFooter,
-  ModalCloseButton,
-  Text,
-  FormTitle,
-  openModal,
-  showToast,
-  createToast
-} from "@moonlight-mod/wp/discord/components/common/index";
+  ModalCloseButton
+} from "@moonlight-mod/wp/discord/design/components/Modal/web/LegacyModal";
+import { openModal } from "@moonlight-mod/wp/discord/modules/modals/Modals";
+import { showToast } from "@moonlight-mod/wp/discord/design/components/Toast/web/ToastAPI";
+import { createToast } from "@moonlight-mod/wp/discord/design/components/Toast/web/Toast";
 import { Button, Looks, Colors } from "@moonlight-mod/wp/discord/uikit/legacy/Button";
 
 import contextMenu from "@moonlight-mod/wp/contextMenu_contextMenu";
@@ -78,10 +76,14 @@ function ViewRawModal({
         justify: "between"
       },
       React.createElement(
-        Text,
+        "div",
         {
-          variant: "heading-lg/semibold",
-          color: "header-primary"
+          style: {
+            color: "var(--header-primary)",
+            fontSize: "20px",
+            fontWeight: 600,
+            lineHeight: 1.2
+          }
         },
         `View Raw — ${type}`
       ),
@@ -101,14 +103,23 @@ function ViewRawModal({
           React.Fragment,
           null,
           React.createElement(
-            FormTitle,
+            "div",
             {
-              tag: "h5",
               style: {
                 marginBottom: "8px"
               }
             },
-            "Content"
+            React.createElement(
+              "div",
+              {
+                style: {
+                  color: "var(--header-primary)",
+                  fontSize: "14px",
+                  fontWeight: 600
+                }
+              },
+              "Content"
+            )
           ),
           React.createElement(
             "pre",
@@ -126,9 +137,8 @@ function ViewRawModal({
               }
             },
             React.createElement(
-              Text,
+              "code",
               {
-                variant: "code",
                 style: {
                   fontSize: "13px",
                   color: "#ffffff"
@@ -139,14 +149,23 @@ function ViewRawModal({
           )
         ),
       React.createElement(
-        FormTitle,
+        "div",
         {
-          tag: "h5",
           style: {
             marginBottom: "8px"
           }
         },
-        `${type} Data`
+        React.createElement(
+          "div",
+          {
+            style: {
+              color: "var(--header-primary)",
+              fontSize: "14px",
+              fontWeight: 600
+            }
+          },
+          `${type} Data`
+        )
       ),
       React.createElement(
         "pre",
@@ -163,9 +182,8 @@ function ViewRawModal({
           }
         },
         React.createElement(
-          Text,
+          "code",
           {
-            variant: "code",
             style: {
               fontSize: "13px",
               color: "#ffffff"

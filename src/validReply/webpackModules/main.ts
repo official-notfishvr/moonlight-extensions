@@ -1,7 +1,22 @@
-import Dispatcher from "@moonlight-mod/wp/discord/Dispatcher";
 import spacepack from "@moonlight-mod/wp/spacepack_spacepack";
 
+function requireMapped(id: string): any {
+  try {
+    if (!(id in (spacepack.modules ?? {})) && !(id in (spacepack.cache ?? {}))) return null;
+    return spacepack.require(id);
+  } catch {
+    return null;
+  }
+}
+
 function findStore(name: string): any {
+  const mapped = requireMapped(`discord/stores/${name}`);
+  const mappedExport = mapped?.default ?? mapped;
+  if (mappedExport?.getName?.() === name) return mappedExport;
+  for (const key of Object.keys(mappedExport ?? {})) {
+    if (mappedExport[key]?.getName?.() === name) return mappedExport[key];
+  }
+
   try {
     const mod = spacepack.findByCode(`"${name}"`)[0].exports;
     if (mod?.default?.getName?.() === name) return mod.default;
@@ -17,6 +32,7 @@ function findStore(name: string): any {
 
 let ReplyStore: any = null;
 let createMessageRecord: any = null;
+let Dispatcher: any = null;
 
 const fetching = new Map<string, string>();
 
@@ -25,6 +41,37 @@ const ReferencedMessageState = {
   NotLoaded: 1,
   Deleted: 2
 };
+
+function getDispatcher(): any {
+  if (Dispatcher) return Dispatcher;
+  try {
+    const mod = requireMapped("discord/Dispatcher");
+    Dispatcher = mod?.default ?? mod;
+  } catch {
+    Dispatcher = null;
+  }
+  return Dispatcher;
+}
+
+function getReplyStore(): any {
+  if (ReplyStore) return ReplyStore;
+
+  const mapped = requireMapped("discord/modules/replies/ReferencedMessageStore");
+  const mappedExport = mapped?.default ?? mapped;
+  if (mappedExport?.getName?.() === "ReferencedMessageStore") {
+    ReplyStore = mappedExport;
+    return ReplyStore;
+  }
+  for (const key of Object.keys(mappedExport ?? {})) {
+    if (mappedExport[key]?.getName?.() === "ReferencedMessageStore") {
+      ReplyStore = mappedExport[key];
+      return ReplyStore;
+    }
+  }
+
+  ReplyStore = findStore("ReferencedMessageStore");
+  return ReplyStore;
+}
 
 function ensureCreateMessageRecord() {
   if (createMessageRecord) return;
@@ -85,12 +132,13 @@ export async function fetchReply(reply: any) {
     if (!replyMsg) return;
 
     if (replyMsg.id !== messageId) {
-      if (ReplyStore) {
-        ReplyStore.set(channelId, messageId, {
+      const replyStore = getReplyStore();
+      if (replyStore) {
+        replyStore.set(channelId, messageId, {
           state: ReferencedMessageState.Deleted
         });
       }
-      Dispatcher.dispatch({
+      getDispatcher()?.dispatch?.({
         type: "MESSAGE_DELETE",
         channelId: channelId,
         message: messageId
@@ -99,14 +147,15 @@ export async function fetchReply(reply: any) {
       ensureCreateMessageRecord();
       const record = createMessageRecord ? createMessageRecord(replyMsg) : replyMsg;
 
-      if (ReplyStore) {
-        ReplyStore.set(replyMsg.channel_id, replyMsg.id, {
+      const replyStore = getReplyStore();
+      if (replyStore) {
+        replyStore.set(replyMsg.channel_id, replyMsg.id, {
           state: ReferencedMessageState.Loaded,
           message: record
         });
       }
 
-      Dispatcher.dispatch({
+      getDispatcher()?.dispatch?.({
         type: "MESSAGE_UPDATE",
         message: replyMsg
       });

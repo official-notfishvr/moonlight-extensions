@@ -1,4 +1,3 @@
-import Dispatcher from "@moonlight-mod/wp/discord/Dispatcher";
 import spacepack from "@moonlight-mod/wp/spacepack_spacepack";
 
 const EXT_ID = "messageClickActions";
@@ -43,6 +42,17 @@ function findExport(...finds: string[]): any {
 
 function findStore(name: string): any {
   try {
+    const mappedId = `discord/stores/${name}`;
+    if (!(mappedId in (spacepack.modules ?? {})) && !(mappedId in (spacepack.cache ?? {}))) throw new Error();
+    const mapped = spacepack.require(mappedId);
+    const mappedExport = mapped?.default ?? mapped;
+    if (mappedExport?.getName?.() === name) return mappedExport;
+    for (const key of Object.keys(mappedExport ?? {})) {
+      if (mappedExport[key]?.getName?.() === name) return mappedExport[key];
+    }
+  } catch {}
+
+  try {
     const mod = spacepack.findByCode(`"${name}"`)[0].exports;
     if (mod?.default?.getName?.() === name) return mod.default;
     if (mod?.getName?.() === name) return mod;
@@ -60,6 +70,21 @@ let _PermissionStore: any = null;
 let _EditMessageStore: any = null;
 let _MessageActions: any = null;
 let _WindowStore: any = null;
+let _Dispatcher: any = null;
+
+function getDispatcher(): any {
+  if (_Dispatcher) return _Dispatcher;
+  try {
+    if (!("discord/Dispatcher" in (spacepack.modules ?? {})) && !("discord/Dispatcher" in (spacepack.cache ?? {}))) {
+      return null;
+    }
+    const mod = spacepack.require("discord/Dispatcher");
+    _Dispatcher = mod?.default ?? mod;
+  } catch {
+    _Dispatcher = null;
+  }
+  return _Dispatcher;
+}
 
 function ensureStores() {
   if (!_UserStore) _UserStore = findStore("UserStore");
@@ -128,7 +153,7 @@ function isModifierActive(modifier: Modifier): boolean {
 }
 
 let singleClickTimer: ReturnType<typeof setTimeout> | null = null;
-let lastClickTime = 0;
+const lastClickTime = 0;
 let lastMouseDownTime = 0;
 
 document.addEventListener("mousedown", () => {
@@ -310,7 +335,7 @@ function quoteMessage(channel: any, msg: any) {
       .join("\n") + "\n";
   insertTextIntoChatInput(quoteText);
   if (getSetting<boolean>("quoteWithReply", true)) {
-    Dispatcher.dispatch({
+    getDispatcher()?.dispatch?.({
       type: "CREATE_PENDING_REPLY",
       channel,
       message: msg,
@@ -326,7 +351,7 @@ function openInNewTab(msg: any, channel: any) {
 }
 
 function openInThread(msg: any, channel: any) {
-  Dispatcher.dispatch({
+  getDispatcher()?.dispatch?.({
     type: "OPEN_THREAD_FLOW_MODAL",
     channelId: channel.id,
     messageId: msg.id
@@ -342,7 +367,7 @@ async function executeAction(action: ClickAction, msg: any, channel: any, event:
     case "DELETE":
       if (!canDelete(msg, channel)) return;
       if (msg.deleted) {
-        Dispatcher.dispatch({
+        getDispatcher()?.dispatch?.({
           type: "MESSAGE_DELETE",
           channelId: channel.id,
           id: msg.id,
@@ -387,7 +412,7 @@ async function executeAction(action: ClickAction, msg: any, channel: any, event:
       if (_MessageActions?.startEditMessage) {
         _MessageActions.startEditMessage(channel.id, msg.id, msg.content);
       } else {
-        Dispatcher.dispatch({
+        getDispatcher()?.dispatch?.({
           type: "MESSAGE_START_EDIT",
           channelId: channel.id,
           messageId: msg.id,
@@ -400,7 +425,7 @@ async function executeAction(action: ClickAction, msg: any, channel: any, event:
     case "REPLY":
       if (!canReply(msg)) return;
       if (!canSend(channel)) return;
-      Dispatcher.dispatch({
+      getDispatcher()?.dispatch?.({
         type: "CREATE_PENDING_REPLY",
         channel,
         message: msg,
@@ -418,7 +443,7 @@ async function executeAction(action: ClickAction, msg: any, channel: any, event:
       } else {
         if (!canReply(msg)) return;
         if (!canSend(channel)) return;
-        Dispatcher.dispatch({
+        getDispatcher()?.dispatch?.({
           type: "CREATE_PENDING_REPLY",
           channel,
           message: msg,

@@ -18,6 +18,6 @@ export const patches: ExtensionWebExports["patches"] = [
 export const webpackModules: ExtensionWebExports["webpackModules"] = {
   main: {
     entrypoint: true,
-    dependencies: [{ id: "discord/Dispatcher" }, { ext: "spacepack", id: "spacepack" }]
+    dependencies: [{ ext: "spacepack", id: "spacepack" }]
   }
 };

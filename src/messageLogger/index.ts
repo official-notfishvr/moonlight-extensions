@@ -10,45 +10,6 @@ const ML_REQ = 'require("messageLogger_main")';
 
 export const patches: ExtensionWebExports["patches"] = [
   {
-    find: '"MessageStore"',
-    replace: [
-      {
-        match: /function (?=.+?MESSAGE_DELETE:(\i))\1\((\i)\)\{let.+?((?:\i\.){2})getOrCreate.+?\}(?=function)/,
-        replacement: (_: string, n: string, p: string, pre: string) =>
-          `function ${n}(${p}){` +
-          `var cache=${pre}getOrCreate(${p}.channelId);` +
-          `var ml=${ML_REQ};` +
-          `cache=ml.handleDelete(cache,${p},false);` +
-          `${pre}commit(cache);` +
-          `}`
-      },
-      {
-        match: /function (?=.+?MESSAGE_DELETE_BULK:(\i))\1\((\i)\)\{let.+?((?:\i\.){2})getOrCreate.+?\}(?=function)/,
-        replacement: (_: string, n: string, p: string, pre: string) =>
-          `function ${n}(${p}){` +
-          `var cache=${pre}getOrCreate(${p}.channelId);` +
-          `var ml=${ML_REQ};` +
-          `cache=ml.handleDelete(cache,${p},true);` +
-          `${pre}commit(cache);` +
-          `}`
-      },
-      {
-        match: /(function (\i)\((\i)\).+?)\.update\((\i)(?=.*MESSAGE_UPDATE:\2)/,
-        replacement: (_: string, lead: string, _name: string, ev: string, id: string) =>
-          `${lead}.update(${id},m=>{` +
-          `var ml=${ML_REQ};` +
-          `if((${ev}.message.flags&64)===64||(ml.shouldIgnore(${ev}.message,true)))return m;` +
-          `if(!${ev}.message.edited_timestamp||${ev}.message.content===m.content)return m;` +
-          `return m.set('editHistory',[...(m.editHistory||[]),ml.makeEdit(${ev}.message,m)]);` +
-          `}).update(${id}`
-      },
-      {
-        match: /(?<=getLastEditableMessage\(\i\)\{.{0,200}\.find\((\i)=>)/,
-        replacement: "!$1.deleted&&"
-      }
-    ]
-  },
-  {
     find: "}addReaction(",
     replace: {
       match: /this\.customRenderedContent=(\i)\.customRenderedContent,/,
@@ -123,13 +84,6 @@ export const patches: ExtensionWebExports["patches"] = [
     }
   },
   {
-    find: '"ReferencedMessageStore"',
-    replace: [
-      { match: /MESSAGE_DELETE:\i,/, replacement: "MESSAGE_DELETE:()=>{}," },
-      { match: /MESSAGE_DELETE_BULK:\i,/, replacement: "MESSAGE_DELETE_BULK:()=>{}," }
-    ]
-  },
-  {
     find: ".MESSAGE,commandTargetId:",
     replace: {
       match: /children:(\[""===.+?\])/,
@@ -167,7 +121,6 @@ export const webpackModules: ExtensionWebExports["webpackModules"] = {
   main: {
     entrypoint: true,
     dependencies: [
-      { id: "discord/Dispatcher" },
       { id: "react" },
       { ext: "spacepack", id: "spacepack" },
       { ext: "contextMenu", id: "contextMenu" }

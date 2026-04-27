@@ -1,14 +1,186 @@
 import React from "@moonlight-mod/wp/react";
-import Dispatcher from "@moonlight-mod/wp/discord/Dispatcher";
 import { createMessageDiff, DiffPart } from "@moonlight-mod/wp/messageLogger_diffUtils";
 import spacepack from "@moonlight-mod/wp/spacepack_spacepack";
 import contextMenu from "@moonlight-mod/wp/contextMenu_contextMenu";
 
 const EXT_ID = "messageLogger";
+let Dispatcher: any = null;
 
 function getSetting<T>(name: string, fallback: T): T {
   const val = moonlight.getConfigOption<T>(EXT_ID, name);
   return val !== undefined ? val : fallback;
+}
+
+function getDispatcher(): any {
+  if (Dispatcher) return Dispatcher;
+  try {
+    if (!("discord/Dispatcher" in (spacepack.modules ?? {})) && !("discord/Dispatcher" in (spacepack.cache ?? {}))) {
+      return null;
+    }
+    const mod = spacepack.require("discord/Dispatcher");
+    Dispatcher = mod?.default ?? mod;
+  } catch {
+    Dispatcher = null;
+  }
+  return Dispatcher;
+}
+
+function findStore(name: string): any {
+  try {
+    const mappedId = `discord/stores/${name}`;
+    if (!(mappedId in (spacepack.modules ?? {})) && !(mappedId in (spacepack.cache ?? {}))) throw new Error();
+    const mapped = spacepack.require(mappedId);
+    const mappedExport = mapped?.default ?? mapped;
+    if (mappedExport?.getName?.() === name) return mappedExport;
+    for (const key of Object.keys(mappedExport ?? {})) {
+      if (mappedExport[key]?.getName?.() === name) return mappedExport[key];
+    }
+  } catch {}
+
+  try {
+    const mod = spacepack.findByCode(`"${name}"`)[0]?.exports;
+    if (mod?.default?.getName?.() === name) return mod.default;
+    if (mod?.getName?.() === name) return mod;
+    for (const key of Object.keys(mod ?? {})) {
+      if (mod[key]?.getName?.() === name) return mod[key];
+    }
+    return mod?.default ?? mod;
+  } catch {
+    return null;
+  }
+}
+
+function cloneMessageForUpdate(message: any): any {
+  const next = { ...message };
+  next.attachments = Array.isArray(message?.attachments)
+    ? message.attachments.map((attachment: any) => ({ ...attachment }))
+    : message.attachments;
+  return next;
+}
+
+function markDeletedMessage(message: any): any {
+  const next = cloneMessageForUpdate(message);
+  next.deleted = true;
+  if (Array.isArray(next.attachments)) {
+    next.attachments = next.attachments.map((attachment: any) => ({
+      ...attachment,
+      deleted: true
+    }));
+  }
+  return next;
+}
+
+function getMessageStore(): any {
+  return findStore("MessageStore");
+}
+
+function getStoredMessage(channelId: string | undefined, messageId: string | undefined): any {
+  if (!channelId || !messageId) return null;
+
+  const store = getMessageStore();
+  if (!store) return null;
+
+  try {
+    return store.getMessage?.(channelId, messageId) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function dispatchSyntheticMessageUpdate(message: any) {
+  getDispatcher()?.dispatch?.({
+    type: "MESSAGE_UPDATE",
+    message,
+    mlPatched: true
+  });
+}
+
+function handleDeleteEvent(event: any): boolean {
+  const stored = getStoredMessage(event.channelId, event.id);
+  if (!stored) return false;
+  if (event.mlDeleted || shouldIgnore(stored)) return false;
+
+  dispatchSyntheticMessageUpdate(markDeletedMessage(stored));
+  console.log("[MessageLogger] Deleted message preserved:", event.id, "channel:", event.channelId);
+  return true;
+}
+
+function handleBulkDeleteEvent(event: any): boolean {
+  const ids = Array.isArray(event.ids) ? event.ids : [];
+  if (ids.length === 0) return false;
+
+  let blocked = false;
+  for (const id of ids) {
+    const stored = getStoredMessage(event.channelId, id);
+    if (!stored || shouldIgnore(stored)) continue;
+
+    dispatchSyntheticMessageUpdate(markDeletedMessage(stored));
+    console.log("[MessageLogger] Deleted message preserved:", id, "channel:", event.channelId);
+    blocked = true;
+  }
+
+  return blocked;
+}
+
+function handleMessageUpdateEvent(event: any) {
+  const nextMessage = event?.message;
+  if (!nextMessage || event?.mlPatched) return;
+
+  const stored = getStoredMessage(nextMessage.channel_id, nextMessage.id);
+  if (!stored) return;
+
+  if (stored.deleted !== undefined) nextMessage.deleted = stored.deleted;
+  if (stored.editHistory !== undefined) nextMessage.editHistory = [...(stored.editHistory ?? [])];
+  if (stored.firstEditTimestamp !== undefined) nextMessage.firstEditTimestamp = stored.firstEditTimestamp;
+  if (stored.diffViewDisabled !== undefined) nextMessage.diffViewDisabled = stored.diffViewDisabled;
+
+  const EPHEMERAL = 64;
+  if ((nextMessage.flags & EPHEMERAL) === EPHEMERAL || shouldIgnore(nextMessage, true)) return;
+  if (!nextMessage.edited_timestamp || nextMessage.content === stored.content) return;
+
+  nextMessage.editHistory = [...(stored.editHistory ?? []), makeEdit(nextMessage, stored)];
+  nextMessage.firstEditTimestamp ??= stored.firstEditTimestamp ?? stored.editedTimestamp ?? stored.timestamp;
+}
+
+let interceptorInstalled = false;
+let interceptorInstallScheduled = false;
+
+function installDispatcherInterceptor() {
+  if (interceptorInstalled) return;
+  interceptorInstalled = true;
+
+  const dispatcher = getDispatcher();
+  if (!dispatcher?.addInterceptor) {
+    interceptorInstalled = false;
+    return;
+  }
+
+  dispatcher.addInterceptor((event: any) => {
+    switch (event?.type) {
+      case "MESSAGE_DELETE":
+        return handleDeleteEvent(event);
+      case "MESSAGE_DELETE_BULK":
+        return handleBulkDeleteEvent(event);
+      case "MESSAGE_UPDATE":
+        handleMessageUpdateEvent(event);
+        return false;
+      default:
+        return false;
+    }
+  });
+}
+
+function scheduleDispatcherInterceptor() {
+  if (interceptorInstallScheduled) return;
+  interceptorInstallScheduled = true;
+
+  setTimeout(() => {
+    try {
+      installDispatcherInterceptor();
+    } catch (error) {
+      console.error("[MessageLogger] Failed to install dispatcher interceptor:", error);
+    }
+  }, 0);
 }
 
 function applyDeleteStyle() {
@@ -17,6 +189,7 @@ function applyDeleteStyle() {
 }
 
 applyDeleteStyle();
+scheduleDispatcherInterceptor();
 
 function formatTimestamp(ts: Date | string | number): string {
   if (!ts) return "";
@@ -50,7 +223,7 @@ export function shouldIgnore(message: any, isEdit: boolean = false): boolean {
 
     let currentUserId = "";
     try {
-      const UserStore = spacepack.findByCode('"UserStore"')[0].exports;
+      const UserStore = findStore("UserStore");
       const user = UserStore?.getCurrentUser?.();
       if (user) currentUserId = user.id;
     } catch (_) {}
@@ -61,7 +234,7 @@ export function shouldIgnore(message: any, isEdit: boolean = false): boolean {
     if (ignoreChannels.includes(message.channel_id)) return true;
 
     try {
-      const ChannelStore = spacepack.findByCode('"ChannelStore"')[0].exports;
+      const ChannelStore = findStore("ChannelStore");
       const channel = ChannelStore?.getChannel?.(message.channel_id);
       if (channel) {
         if (ignoreChannels.includes(channel.parent_id)) return true;
@@ -298,7 +471,7 @@ export function getMessageContextMenuItems(props: { message: any }): React.React
           label: "Remove Deleted Message",
           color: "danger",
           action: () => {
-            Dispatcher.dispatch({
+            getDispatcher()?.dispatch?.({
               type: "MESSAGE_DELETE",
               channelId: msg.channel_id,
               id: msg.id,
@@ -369,7 +542,7 @@ contextMenu.addItem(
           label: "Remove Deleted Message",
           color: "danger",
           action: () => {
-            Dispatcher.dispatch({
+            getDispatcher()?.dispatch?.({
               type: "MESSAGE_DELETE",
               channelId: msg.channel_id,
               id: msg.id,

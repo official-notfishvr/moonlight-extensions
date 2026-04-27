@@ -23,6 +23,6 @@
     "typescript": "^5.3.2"
   },
   "dependencies": {
-    "@moonlight-mod/types": "^2026.2.1"
+    "@moonlight-mod/types": "^2026.4.0"
   }
 }
