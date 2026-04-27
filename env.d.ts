@@ -2,21 +2,6 @@
 /// <reference path="@moonlight-mod/types/src/import.d.ts" />
 /// <reference path="@moonlight-mod/types/src/mappings.d.ts" />
 
-declare module "@moonlight-mod/wp/discord/components/common/index" {
-  import { MappedModules } from "@moonlight-mod/mappings";
-
-  export const ModalRoot: MappedModules["discord/components/common/index"]["ModalRoot"];
-  export const ModalHeader: MappedModules["discord/components/common/index"]["ModalHeader"];
-  export const ModalContent: MappedModules["discord/components/common/index"]["ModalContent"];
-  export const ModalFooter: MappedModules["discord/components/common/index"]["ModalFooter"];
-  export const ModalCloseButton: MappedModules["discord/components/common/index"]["ModalCloseButton"];
-  export const Text: MappedModules["discord/components/common/index"]["Text"];
-  export const FormTitle: MappedModules["discord/components/common/index"]["FormTitle"];
-  export const openModal: MappedModules["discord/components/common/index"]["openModal"];
-  export const showToast: MappedModules["discord/components/common/index"]["showToast"];
-  export const createToast: MappedModules["discord/components/common/index"]["createToast"];
-}
-
 declare module "@moonlight-mod/wp/messageLogger_diffUtils" {
   export interface DiffPart {
     type: "added" | "removed" | "unchanged";
@@ -70,4 +55,59 @@ declare module "@moonlight-mod/wp/messageLogger_main" {
     message: { id: string; channel_id: string; content?: string },
     previousContent?: string
   ): React.ReactNode;
+}
+
+declare module "@moonlight-mod/wp/discord/actions/MessageActionCreators" {
+  const _default: any;
+  export default _default;
+}
+
+declare module "@moonlight-mod/wp/discord/modules/replies/ReferencedMessageStore" {
+  const _default: any;
+  export default _default;
+}
+
+declare module "@moonlight-mod/wp/discord/modules/user_profile/UserProfileStore" {
+  const _default: any;
+  export default _default;
+}
+
+declare module "@moonlight-mod/wp/discord/stores/AuthenticationStore" {
+  const _default: any;
+  export default _default;
+}
+
+declare module "@moonlight-mod/wp/discord/stores/ChannelStore" {
+  const _default: any;
+  export default _default;
+}
+
+declare module "@moonlight-mod/wp/discord/stores/GuildStore" {
+  const _default: any;
+  export default _default;
+}
+
+declare module "@moonlight-mod/wp/discord/stores/MessageStore" {
+  const _default: any;
+  export default _default;
+}
+
+declare module "@moonlight-mod/wp/discord/stores/PermissionStore" {
+  const _default: any;
+  export default _default;
+}
+
+declare module "@moonlight-mod/wp/discord/stores/RelationshipStore" {
+  const _default: any;
+  export default _default;
+}
+
+declare module "@moonlight-mod/wp/discord/stores/SelectedChannelStore" {
+  const _default: any;
+  export default _default;
+}
+
+declare module "@moonlight-mod/wp/discord/stores/UserStore" {
+  const _default: any;
+  export default _default;
 }

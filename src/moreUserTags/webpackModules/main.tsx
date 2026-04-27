@@ -29,7 +29,7 @@ function findStore(name: string): any {
     const mod = spacepack.findByCode(`"${name}"`)[0].exports;
     if (mod?.default?.getName?.() === name) return mod.default;
     if (mod?.getName?.() === name) return mod;
-    for (const key of Object.keys(mod)) {
+    for (const key of Object.keys(mod ?? {})) {
       if (mod[key]?.getName?.() === name) return mod[key];
     }
     return mod?.default ?? mod;
@@ -42,9 +42,8 @@ let GuildStore: any = null;
 let ChannelStore: any = null;
 let SelectedChannelStore: any = null;
 let PermissionStore: any = null;
-let PermissionBits: any = null;
 
-const PermissionBitsFallback = {
+const PermissionBits = {
   ADMINISTRATOR: 1n << 3n,
   MANAGE_GUILD: 1n << 5n,
   MANAGE_CHANNELS: 1n << 4n,
@@ -58,15 +57,16 @@ const PermissionBitsFallback = {
   MODERATE_MEMBERS: 1n << 40n
 } as const;
 
+type PermissionName = keyof typeof PermissionBits;
+
 function init() {
   GuildStore = findStore("GuildStore");
   ChannelStore = findStore("ChannelStore");
   SelectedChannelStore = findStore("SelectedChannelStore");
   PermissionStore = findStore("PermissionStore");
-  PermissionBits = PermissionBitsFallback;
 }
 
-const ALL_PERMS = [
+const ALL_PERMS: PermissionName[] = [
   "ADMINISTRATOR",
   "MANAGE_GUILD",
   "MANAGE_CHANNELS",
@@ -80,7 +80,12 @@ const ALL_PERMS = [
   "MODERATE_MEMBERS"
 ];
 
-const tags = [
+const tags: Array<{
+  name: string;
+  displayName: string;
+  condition?: (u: any, c: any) => boolean;
+  permissions?: PermissionName[];
+}> = [
   {
     name: "OWNER",
     displayName: "Owner",
@@ -113,13 +118,13 @@ const tags = [
   }
 ];
 
-function getPermissions(user: any, channel: any): string[] {
-  if (!GuildStore || !PermissionStore || !PermissionBits) return [];
+function getPermissions(user: any, channel: any): PermissionName[] {
+  if (!GuildStore || !PermissionStore) return [];
   const guildId = channel?.guild_id;
   const guild = GuildStore.getGuild?.(guildId);
   if (!guild) return [];
   if (guild.ownerId === user?.id) return ALL_PERMS;
-  const result: string[] = [];
+  const result: PermissionName[] = [];
   for (const perm of ALL_PERMS) {
     try {
       if (PermissionStore.can?.(PermissionBits[perm], channel, user)) {
@@ -165,11 +170,9 @@ function processMemberList() {
           tag = t;
           break;
         }
-      } else if (t.permissions) {
-        if (t.permissions.some((p) => perms.includes(p))) {
-          tag = t;
-          break;
-        }
+      } else if (t.permissions?.some((p) => perms.includes(p))) {
+        tag = t;
+        break;
       }
     }
     if (tag) {

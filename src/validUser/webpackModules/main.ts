@@ -17,7 +17,7 @@ function findStore(name: string): any {
     const mod = spacepack.findByCode(`"${name}"`)[0].exports;
     if (mod?.default?.getName?.() === name) return mod.default;
     if (mod?.getName?.() === name) return mod;
-    for (const key of Object.keys(mod)) {
+    for (const key of Object.keys(mod ?? {})) {
       if (mod[key]?.getName?.() === name) return mod[key];
     }
     return mod?.default ?? mod;
@@ -207,7 +207,7 @@ async function getUser(id: string) {
 
     getDispatcher()?.dispatch?.({
       type: "USER_UPDATE",
-      user: user
+      user
     });
 
     await getDispatcher()?.dispatch?.({
@@ -250,10 +250,10 @@ function MentionWrapper({ data, UserMention, RoleMention, parse, props }: any) {
   if (userId) {
     return React.createElement(UserMention, {
       className: "mention",
-      userId: userId,
+      userId,
       channelId: data.channelId,
       inlinePreview: props.noStyleAndInteraction,
-      props: props,
+      props,
       key: props.key
     });
   }
@@ -264,7 +264,7 @@ function MentionWrapper({ data, UserMention, RoleMention, parse, props }: any) {
     RoleMention,
     {
       ...data,
-      props: props,
+      props,
       inlinePreview: props.formatInline
     },
     React.createElement(
@@ -276,9 +276,7 @@ function MentionWrapper({ data, UserMention, RoleMention, parse, props }: any) {
 
           const match = mention.match(/<@!?(\d+)>/);
           const id = match?.[1];
-          if (!id) return;
-
-          if (fetching.has(id)) return;
+          if (!id || fetching.has(id)) return;
 
           ensureStores();
           if (_UserStore?.getUser?.(id)) {

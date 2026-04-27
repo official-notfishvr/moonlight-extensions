@@ -223,10 +223,10 @@ export function shouldIgnore(message: any, isEdit: boolean = false): boolean {
 
     let currentUserId = "";
     try {
-      const UserStore = findStore("UserStore");
-      const user = UserStore?.getCurrentUser?.();
+      const userStore = findStore("UserStore");
+      const user = userStore?.getCurrentUser?.();
       if (user) currentUserId = user.id;
-    } catch (_) {}
+    } catch {}
 
     if (ignoreBots && message.author?.bot) return true;
     if (ignoreSelf && message.author?.id === currentUserId) return true;
@@ -234,19 +234,19 @@ export function shouldIgnore(message: any, isEdit: boolean = false): boolean {
     if (ignoreChannels.includes(message.channel_id)) return true;
 
     try {
-      const ChannelStore = findStore("ChannelStore");
-      const channel = ChannelStore?.getChannel?.(message.channel_id);
+      const channelStore = findStore("ChannelStore");
+      const channel = channelStore?.getChannel?.(message.channel_id);
       if (channel) {
         if (ignoreChannels.includes(channel.parent_id)) return true;
         if (ignoreGuilds.includes(channel.guild_id)) return true;
       }
-    } catch (_) {}
+    } catch {}
 
     if (isEdit && !logEdits) return true;
     if (!isEdit && !logDeletes) return true;
 
     return false;
-  } catch (_) {
+  } catch {
     return false;
   }
 }
@@ -307,11 +307,8 @@ export function makeEdit(
 
 function createDiffElement(part: DiffPart, key: React.Key): React.ReactElement {
   let className: string | undefined = undefined;
-  if (part.type === "added") {
-    className = "messagelogger-diff-added";
-  } else if (part.type === "removed") {
-    className = "messagelogger-diff-removed";
-  }
+  if (part.type === "added") className = "messagelogger-diff-added";
+  else if (part.type === "removed") className = "messagelogger-diff-removed";
   return React.createElement("span", { key, className }, part.text);
 }
 
@@ -343,10 +340,8 @@ export function renderEdits(props: { message: any }): React.ReactNode {
     if (!inlineEdits) return null;
 
     const history: Array<{ timestamp: Date; content: string }> = msg.editHistory;
-
-    const elements = history.map((edit: { timestamp: Date; content: string }, idx: number) => {
+    const elements = history.map((edit, idx) => {
       const nextContent = idx === history.length - 1 ? msg.content : history[idx + 1]?.content;
-
       const parsed = parseEditContent(edit.content, msg, nextContent);
       const ts = formatTimestamp(edit.timestamp);
 
@@ -411,18 +406,6 @@ export function openHistoryModal(message: any): void {
   });
   logOutput += "  Current: " + message.content;
   console.log(logOutput);
-
-  const notice = document.createElement("div");
-  notice.style.cssText =
-    "position:fixed;top:60px;right:20px;z-index:99999;" +
-    "background:var(--background-floating, #18191c);" +
-    "color:var(--text-normal, #dcddde);" +
-    "padding:12px 16px;border-radius:8px;font-size:14px;" +
-    "box-shadow:0 4px 12px rgba(0,0,0,0.3);max-width:400px;" +
-    "border:1px solid var(--background-modifier-accent, #40444b);";
-  notice.textContent = "Edit history logged to console (Ctrl+Shift+I). " + history.length + " edit(s) recorded.";
-  document.body.appendChild(notice);
-  setTimeout(() => notice.remove(), 4000);
 }
 
 export const DELETED_MESSAGE_COUNT = () => ({
@@ -457,9 +440,7 @@ export function getMessageContextMenuItems(props: { message: any }): React.React
           label: "Hide Delete Highlight",
           action: () => {
             const el = document.getElementById("chat-messages-" + msg.channel_id + "-" + msg.id);
-            if (el) {
-              el.classList.remove("messagelogger-deleted");
-            }
+            if (el) el.classList.remove("messagelogger-deleted");
           }
         })
       );
@@ -488,9 +469,7 @@ export function getMessageContextMenuItems(props: { message: any }): React.React
           id: "ml-view-history",
           key: "ml-view-history",
           label: "View Edit History (" + msg.editHistory.length + ")",
-          action: () => {
-            openHistoryModal(msg);
-          }
+          action: () => openHistoryModal(msg)
         })
       );
 
@@ -576,7 +555,6 @@ contextMenu.addItem(
     }
 
     if (items.length === 0) return null;
-
     return React.createElement(contextMenu.MenuGroup, { key: "ml-ctx-group" }, ...items);
   },
   "copy-id"

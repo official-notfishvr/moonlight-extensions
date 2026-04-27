@@ -120,11 +120,7 @@ export const webpackModules: ExtensionWebExports["webpackModules"] = {
   },
   main: {
     entrypoint: true,
-    dependencies: [
-      { id: "react" },
-      { ext: "spacepack", id: "spacepack" },
-      { ext: "contextMenu", id: "contextMenu" }
-    ]
+    dependencies: [{ id: "react" }, { ext: "spacepack", id: "spacepack" }, { ext: "contextMenu", id: "contextMenu" }]
   }
 };
 
