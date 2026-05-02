@@ -87,6 +87,11 @@ declare module "@moonlight-mod/wp/discord/stores/GuildStore" {
   export default _default;
 }
 
+declare module "@moonlight-mod/wp/discord/stores/GuildMemberStore" {
+  const _default: any;
+  export default _default;
+}
+
 declare module "@moonlight-mod/wp/discord/stores/MessageStore" {
   const _default: any;
   export default _default;

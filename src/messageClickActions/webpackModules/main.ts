@@ -8,6 +8,22 @@ import ClipboardUtils from "@moonlight-mod/wp/discord/utils/ClipboardUtils";
 import spacepack from "@moonlight-mod/wp/spacepack_spacepack";
 
 const EXT_ID = "messageClickActions";
+const EPHEMERAL_FLAG = 64;
+const REPLYABLE_TYPES = new Set([0, 6, 18, 19, 20, 21]);
+const IGNORED_TARGET_SELECTORS = [
+  "a",
+  "button",
+  '[role="button"]',
+  "img",
+  "video",
+  '[class*="embedWrapper"]',
+  '[class*="reactionInner"]',
+  '[class*="avatar"]',
+  '[class*="username"]',
+  '[class*="repliedMessage"]',
+  '[class*="codeBlockText"]',
+  '[class*="spoilerContent"]'
+].join(",");
 
 type Modifier = "NONE" | "SHIFT" | "CTRL" | "ALT" | "BACKSPACE" | "DELETE";
 type ClickAction =
@@ -26,31 +42,45 @@ type ClickAction =
   | "QUOTE"
   | "PIN";
 
+type MessageContext = {
+  message: any;
+  channel: any;
+};
+
+let messageActions: any = null;
+let singleClickTimer: ReturnType<typeof setTimeout> | null = null;
+let lastMouseDownTime = 0;
+let installed = false;
+const pressedKeys = new Set<string>();
+
 function getSetting<T>(name: string, fallback: T): T {
-  const val = moonlight.getConfigOption<T>(EXT_ID, name);
-  return val !== undefined ? val : fallback;
+  const value = moonlight.getConfigOption<T>(EXT_ID, name);
+  return value !== undefined ? value : fallback;
 }
 
-function findExport(...finds: string[]): any {
+function findExport(...needles: string[]) {
   try {
-    const mod = spacepack.findByCode(...finds)[0].exports;
-    if (!mod) return null;
-    const funcName = finds[0];
-    if (typeof mod[funcName] === "function") return mod;
-    if (mod.default && typeof mod.default[funcName] === "function") return mod.default;
-    for (const key of Object.keys(mod)) {
-      if (mod[key] && typeof mod[key][funcName] === "function") return mod[key];
+    const exports = spacepack.findByCode(...needles)[0]?.exports;
+    if (!exports) return null;
+
+    const method = needles[0];
+    if (typeof exports[method] === "function") return exports;
+    if (typeof exports.default?.[method] === "function") return exports.default;
+
+    for (const key of Object.keys(exports)) {
+      if (typeof exports[key]?.[method] === "function") return exports[key];
     }
-    return mod?.default ?? mod;
+
+    return exports.default ?? exports;
   } catch {
     return null;
   }
 }
 
-let messageActions: any = null;
-
-function ensureStores() {
-  if (!messageActions) messageActions = findExport("deleteMessage", "startEditMessage");
+function ensureRuntimeModules() {
+  if (!messageActions) {
+    messageActions = findExport("deleteMessage", "startEditMessage");
+  }
 }
 
 function getCurrentUserId(): string {
@@ -61,31 +91,19 @@ function getCurrentUserId(): string {
   }
 }
 
-const REPLYABLE_TYPES = new Set([0, 6, 18, 19, 20, 21]);
-const EPHEMERAL_FLAG = 64;
+function setPressedKey(event: KeyboardEvent, active: boolean) {
+  if (active) pressedKeys.add(event.key);
+  else pressedKeys.delete(event.key);
+}
 
-const pressedKeys = new Set<string>();
-
-const keydown = (e: KeyboardEvent) => {
-  pressedKeys.add(e.key);
-};
-const keyup = (e: KeyboardEvent) => {
-  pressedKeys.delete(e.key);
-};
-const blur = () => {
+function clearPressedKeys() {
   pressedKeys.clear();
-};
+}
 
 function isModifierActive(modifier: Modifier): boolean {
   switch (modifier) {
     case "NONE":
-      return (
-        !pressedKeys.has("Shift") &&
-        !pressedKeys.has("Control") &&
-        !pressedKeys.has("Alt") &&
-        !pressedKeys.has("Backspace") &&
-        !pressedKeys.has("Delete")
-      );
+      return !["Shift", "Control", "Alt", "Backspace", "Delete"].some((key) => pressedKeys.has(key));
     case "SHIFT":
       return pressedKeys.has("Shift");
     case "CTRL":
@@ -101,14 +119,6 @@ function isModifierActive(modifier: Modifier): boolean {
   }
 }
 
-let singleClickTimer: ReturnType<typeof setTimeout> | null = null;
-let lastMouseDownTime = 0;
-let listenerInstalled = false;
-
-document.addEventListener("mousedown", () => {
-  lastMouseDownTime = Date.now();
-});
-
 function copyToClipboard(text: string) {
   ClipboardUtils.copy(text);
 }
@@ -117,13 +127,14 @@ function showToast(message: string, type: "success" | "error" = "success") {
   showDiscordToast(createToast(message, type === "error" ? ToastType.FAILURE : ToastType.SUCCESS));
 }
 
-function copyWithToast(text: string, toastMsg: string) {
+function copyWithToast(text: string, toast: string) {
   copyToClipboard(text);
-  showToast(toastMsg);
+  showToast(toast);
 }
 
 function canSend(channel: any): boolean {
   if (!channel.guild_id) return true;
+
   try {
     return PermissionStore.can(Permissions.SEND_MESSAGES, channel);
   } catch {
@@ -131,10 +142,10 @@ function canSend(channel: any): boolean {
   }
 }
 
-function canDelete(msg: any, channel: any): boolean {
-  const myId = getCurrentUserId();
-  if (!myId) return false;
-  if (msg.author?.id === myId) return true;
+function canDelete(message: any, channel: any): boolean {
+  const currentUserId = getCurrentUserId();
+  if (!currentUserId) return false;
+  if (message.author?.id === currentUserId) return true;
 
   try {
     return PermissionStore.can(Permissions.MANAGE_MESSAGES, channel);
@@ -143,18 +154,17 @@ function canDelete(msg: any, channel: any): boolean {
   }
 }
 
-function canReply(msg: any): boolean {
-  return REPLYABLE_TYPES.has(msg.type) && (msg.flags & EPHEMERAL_FLAG) !== EPHEMERAL_FLAG;
+function canReply(message: any): boolean {
+  return REPLYABLE_TYPES.has(message.type) && (message.flags & EPHEMERAL_FLAG) !== EPHEMERAL_FLAG;
 }
 
 function insertTextIntoChatInput(text: string) {
   try {
     const editors = document.querySelectorAll('[role="textbox"][contenteditable="true"]');
-    if (editors.length === 0) return;
+    const editor = editors[editors.length - 1] as HTMLElement | undefined;
+    if (!editor) return;
 
-    const editor = editors[editors.length - 1] as HTMLElement;
     editor.focus();
-
     const selection = window.getSelection();
     if (selection) {
       const range = document.createRange();
@@ -168,59 +178,53 @@ function insertTextIntoChatInput(text: string) {
   } catch {}
 }
 
-async function toggleReaction(channelId: string, messageId: string, emoji: string, channel: any, msg: any) {
-  const trimmed = emoji.trim();
-  if (!trimmed) return;
+async function toggleReaction(channelId: string, messageId: string, emoji: string, channel: any, message: any) {
+  const trimmedEmoji = emoji.trim();
+  if (!trimmedEmoji) return;
 
   if (channel.guild_id) {
     try {
-      if (
-        !PermissionStore.can(Permissions.ADD_REACTIONS, channel) ||
-        !PermissionStore.can(Permissions.READ_MESSAGE_HISTORY, channel)
-      ) {
+      const canReact =
+        PermissionStore.can(Permissions.ADD_REACTIONS, channel) &&
+        PermissionStore.can(Permissions.READ_MESSAGE_HISTORY, channel);
+      if (!canReact) {
         showToast("Cannot react: Missing permissions", "error");
         return;
       }
     } catch {}
   }
 
-  const customMatch = trimmed.match(/^:?([\w-]+):(\d+)$/);
-  const emojiParam = customMatch ? `${customMatch[1]}:${customMatch[2]}` : trimmed;
-
-  const hasReacted = msg.reactions?.some((reaction: any) => {
-    const reactionEmoji = reaction.emoji.id ? `${reaction.emoji.name}:${reaction.emoji.id}` : reaction.emoji.name;
-    return reaction.me && reactionEmoji === emojiParam;
+  const customEmoji = trimmedEmoji.match(/^:?([\w-]+):(\d+)$/);
+  const emojiParam = customEmoji ? `${customEmoji[1]}:${customEmoji[2]}` : trimmedEmoji;
+  const hasReacted = message.reactions?.some((reaction: any) => {
+    const current = reaction.emoji.id ? `${reaction.emoji.name}:${reaction.emoji.id}` : reaction.emoji.name;
+    return reaction.me && current === emojiParam;
   });
 
   try {
-    let token: string | null = null;
-    try {
-      token = AuthenticationStore?.getToken?.() ?? null;
-    } catch {}
-
+    let token = AuthenticationStore?.getToken?.() ?? null;
     if (!token) {
-      try {
-        const tokenMod = spacepack.findByCode("getToken", "hideToken")[0].exports;
-        token = (tokenMod?.default ?? tokenMod)?.getToken?.() ?? null;
-      } catch {}
+      const tokenModule = spacepack.findByCode("getToken", "hideToken")[0]?.exports;
+      token = (tokenModule?.default ?? tokenModule)?.getToken?.() ?? null;
     }
-
     if (!token) return;
 
-    const endpoint = `https://discord.com/api/v9/channels/${channelId}/messages/${messageId}/reactions/${encodeURIComponent(emojiParam)}/%40me`;
-    await fetch(endpoint, {
-      method: hasReacted ? "DELETE" : "PUT",
-      headers: { Authorization: token, "Content-Type": "application/json" }
-    });
+    await fetch(
+      `https://discord.com/api/v9/channels/${channelId}/messages/${messageId}/reactions/${encodeURIComponent(emojiParam)}/%40me`,
+      {
+        method: hasReacted ? "DELETE" : "PUT",
+        headers: { Authorization: token, "Content-Type": "application/json" }
+      }
+    );
   } catch {}
 }
 
-function copyLink(msg: any, channel: any) {
+function copyMessageLink(message: any, channel: any) {
   const guildId = channel.guild_id ?? "@me";
-  copyWithToast(`https://discord.com/channels/${guildId}/${channel.id}/${msg.id}`, "Link copied!");
+  copyWithToast(`https://discord.com/channels/${guildId}/${channel.id}/${message.id}`, "Link copied!");
 }
 
-function togglePin(channel: any, msg: any) {
+function togglePin(channel: any, message: any) {
   try {
     if (!PermissionStore.can(Permissions.MANAGE_MESSAGES, channel)) {
       showToast("Cannot pin: Missing permissions", "error");
@@ -230,219 +234,186 @@ function togglePin(channel: any, msg: any) {
 
   try {
     const pinActions = findExport("pinMessage", "unpinMessage");
-    if (msg.pinned) pinActions?.unpinMessage?.(channel, msg.id);
-    else pinActions?.pinMessage?.(channel, msg.id);
+    if (message.pinned) pinActions?.unpinMessage?.(channel, message.id);
+    else pinActions?.pinMessage?.(channel, message.id);
   } catch {}
 }
 
-function quoteMessage(channel: any, msg: any) {
-  if (!canReply(msg)) {
+function quoteMessage(channel: any, message: any) {
+  if (!canReply(message)) {
     showToast("Cannot quote this message type", "error");
     return;
   }
 
-  let content = msg.content;
-  if (getSetting<boolean>("useSelectionForQuote", false)) {
+  let content = message.content;
+  if (getSetting("useSelectionForQuote", false)) {
     const selection = window.getSelection()?.toString().trim();
-    if (selection && msg.content?.includes(selection)) content = selection;
+    if (selection && message.content?.includes(selection)) {
+      content = selection;
+    }
   }
+
   if (!content) return;
 
-  const quoteText =
-    content
-      .split("\n")
-      .map((line: string) => `> ${line}`)
-      .join("\n") + "\n";
+  const quoted = content
+    .split("\n")
+    .map((line: string) => `> ${line}`)
+    .join("\n");
 
-  insertTextIntoChatInput(quoteText);
+  insertTextIntoChatInput(`${quoted}\n`);
 
-  if (getSetting<boolean>("quoteWithReply", true)) {
+  if (getSetting("quoteWithReply", true)) {
     Dispatcher?.dispatch?.({
       type: "CREATE_PENDING_REPLY",
       channel,
-      message: msg,
+      message,
       shouldMention: false,
       showMentionToggle: !channel.isDM?.()
     });
   }
 }
 
-function openInNewTab(msg: any, channel: any) {
+function openMessageInTab(message: any, channel: any) {
   const guildId = channel.guild_id ?? "@me";
-  window.open(`https://discord.com/channels/${guildId}/${channel.id}/${msg.id}`, "_blank");
+  window.open(`https://discord.com/channels/${guildId}/${channel.id}/${message.id}`, "_blank");
 }
 
-function openInThread(msg: any, channel: any) {
+function openMessageThread(message: any, channel: any) {
   Dispatcher?.dispatch?.({
     type: "OPEN_THREAD_FLOW_MODAL",
     channelId: channel.id,
-    messageId: msg.id
+    messageId: message.id
   });
 }
 
-async function executeAction(action: ClickAction, msg: any, channel: any, event: MouseEvent) {
-  ensureStores();
+function startEditingMessage(channel: any, message: any) {
+  if (messageActions?.startEditMessage) {
+    messageActions.startEditMessage(channel.id, message.id, message.content);
+    return;
+  }
 
-  const myId = getCurrentUserId();
-  const isMe = msg.author?.id === myId;
+  Dispatcher?.dispatch?.({
+    type: "MESSAGE_START_EDIT",
+    channelId: channel.id,
+    messageId: message.id,
+    content: message.content
+  });
+}
+
+async function executeAction(action: ClickAction, message: any, channel: any, event: MouseEvent) {
+  ensureRuntimeModules();
+
+  const currentUserId = getCurrentUserId();
+  const isOwnMessage = message.author?.id === currentUserId;
 
   switch (action) {
     case "DELETE":
-      if (!canDelete(msg, channel)) return;
-      if (msg.deleted) {
-        Dispatcher?.dispatch?.({
-          type: "MESSAGE_DELETE",
-          channelId: channel.id,
-          id: msg.id,
-          mlDeleted: true
-        });
+      if (!canDelete(message, channel)) return;
+      if (message.deleted) {
+        Dispatcher?.dispatch?.({ type: "MESSAGE_DELETE", channelId: channel.id, id: message.id, mlDeleted: true });
       } else {
-        messageActions?.deleteMessage?.(channel.id, msg.id);
+        messageActions?.deleteMessage?.(channel.id, message.id);
       }
-      event.preventDefault();
       break;
     case "COPY_LINK":
-      copyLink(msg, channel);
-      event.preventDefault();
+      copyMessageLink(message, channel);
       break;
     case "COPY_ID":
-      copyWithToast(msg.id, "Message ID copied!");
-      event.preventDefault();
+      copyWithToast(message.id, "Message ID copied!");
       break;
     case "COPY_CONTENT":
-      copyWithToast(msg.content || "", "Message content copied!");
-      event.preventDefault();
+      copyWithToast(message.content || "", "Message content copied!");
       break;
     case "COPY_USER_ID":
-      copyWithToast(msg.author?.id || "", "User ID copied!");
-      event.preventDefault();
+      copyWithToast(message.author?.id || "", "User ID copied!");
       break;
     case "EDIT":
-      if (!isMe) return;
-      if (msg.state && msg.state !== "SENT") return;
-
-      if (messageActions?.startEditMessage) {
-        messageActions.startEditMessage(channel.id, msg.id, msg.content);
-      } else {
-        Dispatcher?.dispatch?.({
-          type: "MESSAGE_START_EDIT",
-          channelId: channel.id,
-          messageId: msg.id,
-          content: msg.content
-        });
-      }
-      event.preventDefault();
+      if (!isOwnMessage || (message.state && message.state !== "SENT")) return;
+      startEditingMessage(channel, message);
       break;
     case "REPLY":
-      if (!canReply(msg) || !canSend(channel)) return;
+      if (!canReply(message) || !canSend(channel)) return;
       Dispatcher?.dispatch?.({
         type: "CREATE_PENDING_REPLY",
         channel,
-        message: msg,
+        message,
         shouldMention: !event.shiftKey,
         showMentionToggle: channel.guild_id !== null
       });
-      event.preventDefault();
       break;
     case "EDIT_REPLY":
-      if (isMe) {
-        if (msg.state !== "SENT") return;
-        messageActions?.startEditMessage?.(channel.id, msg.id, msg.content);
+      if (isOwnMessage) {
+        if (message.state !== "SENT") return;
+        startEditingMessage(channel, message);
       } else {
-        if (!canReply(msg) || !canSend(channel)) return;
+        if (!canReply(message) || !canSend(channel)) return;
         Dispatcher?.dispatch?.({
           type: "CREATE_PENDING_REPLY",
           channel,
-          message: msg,
+          message,
           shouldMention: true,
           showMentionToggle: channel.guild_id !== null
         });
       }
-      event.preventDefault();
       break;
     case "QUOTE":
-      quoteMessage(channel, msg);
-      event.preventDefault();
+      quoteMessage(channel, message);
       break;
     case "PIN":
-      togglePin(channel, msg);
-      event.preventDefault();
+      togglePin(channel, message);
       break;
     case "REACT":
-      await toggleReaction(channel.id, msg.id, getSetting<string>("reactEmoji", "💀"), channel, msg);
-      event.preventDefault();
+      await toggleReaction(channel.id, message.id, getSetting("reactEmoji", "💀"), channel, message);
       break;
     case "OPEN_THREAD":
-      openInThread(msg, channel);
-      event.preventDefault();
+      openMessageThread(message, channel);
       break;
     case "OPEN_TAB":
-      openInNewTab(msg, channel);
-      event.preventDefault();
+      openMessageInTab(message, channel);
       break;
     case "NONE":
-      break;
+      return;
   }
+
+  event.preventDefault();
 }
 
-function shouldIgnoreTarget(target: HTMLElement): boolean {
-  if (!target) return true;
-  return !!(
-    target.closest("a") ||
-    target.closest("button") ||
-    target.closest('[role="button"]') ||
-    target.closest("img") ||
-    target.closest("video") ||
-    target.closest('[class*="embedWrapper"]') ||
-    target.closest('[class*="reactionInner"]') ||
-    target.closest('[class*="avatar"]') ||
-    target.closest('[class*="username"]') ||
-    target.closest('[class*="repliedMessage"]') ||
-    target.closest('[class*="codeBlockText"]') ||
-    target.closest('[class*="spoilerContent"]')
-  );
+function shouldIgnoreTarget(target: HTMLElement | null): boolean {
+  return !target || Boolean(target.closest(IGNORED_TARGET_SELECTORS));
 }
 
-function getReactFiber(node: Element): any {
+function getReactFiber(node: Element) {
   for (const key in node) {
     if (key.startsWith("__reactFiber$") || key.startsWith("__reactInternalInstance$")) {
       return (node as any)[key];
     }
   }
-
   return null;
 }
 
 function getMessageRow(target: HTMLElement | null): HTMLElement | null {
-  if (!target) return null;
-  return target.closest?.('[id^="chat-messages-"]') ?? null;
+  return target?.closest?.('[id^="chat-messages-"]') ?? null;
 }
 
-function extractContextFromProps(value: any, visited = new Set<any>()): { message: any; channel: any } | null {
-  if (!value || typeof value !== "object") return null;
-  if (visited.has(value)) return null;
+function extractMessageContext(value: any, visited = new Set<any>()): MessageContext | null {
+  if (!value || typeof value !== "object" || visited.has(value)) return null;
   visited.add(value);
 
-  const message = (value as any).message;
+  const message = value.message;
   const channel =
-    (value as any).channel ??
-    ((value as any).message?.channel_id
-      ? (ChannelStore?.getChannel?.((value as any).message.channel_id) ?? null)
-      : null);
-
+    value.channel ?? (value.message?.channel_id ? ChannelStore?.getChannel?.(value.message.channel_id) : null);
   if (message?.id && channel?.id) return { message, channel };
 
-  for (const key of Object.keys(value)) {
-    const child = (value as any)[key];
+  for (const child of Object.values(value)) {
     if (!child || typeof child !== "object") continue;
-    const result = extractContextFromProps(child, visited);
-    if (result) return result;
+    const context = extractMessageContext(child, visited);
+    if (context) return context;
   }
 
   return null;
 }
 
-function getMessageContextFromEvent(event: MouseEvent): { message: any; channel: any } | null {
+function getMessageContextFromEvent(event: MouseEvent): MessageContext | null {
   let target = event.target as HTMLElement | null;
   if (target?.nodeType === Node.TEXT_NODE) target = target.parentElement as HTMLElement | null;
 
@@ -451,116 +422,130 @@ function getMessageContextFromEvent(event: MouseEvent): { message: any; channel:
 
   let fiber = getReactFiber(row);
   while (fiber) {
-    const result = extractContextFromProps(fiber.memoizedProps);
-    if (result) return result;
+    const context = extractMessageContext(fiber.memoizedProps);
+    if (context) return context;
     fiber = fiber.return;
   }
 
   return null;
 }
 
-function handleMessageClick(event: MouseEvent, msg: any, channel: any) {
-  try {
-    if (event.button !== 0) return;
-    if (!msg || !channel) return;
+function getSingleClickAction(isOwnMessage: boolean): ClickAction {
+  return (
+    isOwnMessage ? getSetting("singleClickAction", "DELETE") : getSetting("singleClickOthersAction", "DELETE")
+  ) as ClickAction;
+}
 
-    let target = event.target as HTMLElement;
-    if (target?.nodeType === Node.TEXT_NODE) target = target.parentElement as HTMLElement;
-    if (shouldIgnoreTarget(target)) return;
+function getDoubleClickAction(isOwnMessage: boolean): ClickAction {
+  return (
+    isOwnMessage ? getSetting("doubleClickAction", "EDIT") : getSetting("doubleClickOthersAction", "REPLY")
+  ) as ClickAction;
+}
 
-    const myId = getCurrentUserId();
-    const isMe = msg.author?.id === myId;
+function getSingleClickModifier(isOwnMessage: boolean): Modifier {
+  return (
+    isOwnMessage ? getSetting("singleClickModifier", "BACKSPACE") : getSetting("singleClickOthersModifier", "BACKSPACE")
+  ) as Modifier;
+}
 
-    const isDM = channel.isDM?.() ?? false;
-    const isSystemDM = channel.isSystemDM?.() ?? false;
-    if (
-      (getSetting<boolean>("disableInDms", false) && isDM) ||
-      (getSetting<boolean>("disableInSystemDms", true) && isSystemDM)
-    ) {
-      return;
+function shouldHandleInChannel(channel: any): boolean {
+  const isDM = channel.isDM?.() ?? false;
+  const isSystemDM = channel.isSystemDM?.() ?? false;
+  if (getSetting("disableInDms", false) && isDM) return false;
+  if (getSetting("disableInSystemDms", true) && isSystemDM) return false;
+  return true;
+}
+
+function scheduleSingleClick(
+  action: ClickAction,
+  modifier: Modifier,
+  context: MessageContext,
+  event: MouseEvent,
+  timeoutMs: number
+) {
+  singleClickTimer = setTimeout(() => {
+    singleClickTimer = null;
+    if (isModifierActive(modifier) && action !== "NONE") {
+      void executeAction(action, context.message, context.channel, event);
     }
+  }, timeoutMs);
+}
 
-    const selectionHoldTimeout = getSetting<number>("selectionHoldTimeout", 300);
-    if (Date.now() - lastMouseDownTime > selectionHoldTimeout) return;
+function clearSingleClickTimer() {
+  if (!singleClickTimer) return;
+  clearTimeout(singleClickTimer);
+  singleClickTimer = null;
+}
 
-    const clickTimeout = getSetting<number>("clickTimeout", 300);
-    const deferDoubleClickForTriple = getSetting<boolean>("deferDoubleClickForTriple", true);
+function handleResolvedMessageClick(event: MouseEvent, context: MessageContext) {
+  if (event.button !== 0) return;
 
-    const singleClickAction = (
-      isMe ? getSetting<string>("singleClickAction", "DELETE") : getSetting<string>("singleClickOthersAction", "DELETE")
-    ) as ClickAction;
-    const doubleClickAction = (
-      isMe ? getSetting<string>("doubleClickAction", "EDIT") : getSetting<string>("doubleClickOthersAction", "REPLY")
-    ) as ClickAction;
-    const tripleClickAction = getSetting<string>("tripleClickAction", "REACT") as ClickAction;
+  let target = event.target as HTMLElement | null;
+  if (target?.nodeType === Node.TEXT_NODE) target = target.parentElement as HTMLElement | null;
+  if (shouldIgnoreTarget(target)) return;
+  if (!shouldHandleInChannel(context.channel)) return;
 
-    const singleClickModifier = (
-      isMe
-        ? getSetting<string>("singleClickModifier", "BACKSPACE")
-        : getSetting<string>("singleClickOthersModifier", "BACKSPACE")
-    ) as Modifier;
-    const doubleClickModifier = getSetting<string>("doubleClickModifier", "NONE") as Modifier;
-    const tripleClickModifier = getSetting<string>("tripleClickModifier", "NONE") as Modifier;
+  const holdThreshold = getSetting("selectionHoldTimeout", 300);
+  if (Date.now() - lastMouseDownTime > holdThreshold) return;
 
-    if (event.detail === 3) {
-      if (singleClickTimer) {
-        clearTimeout(singleClickTimer);
-        singleClickTimer = null;
-      }
-      if (!deferDoubleClickForTriple) return;
-      if (isModifierActive(tripleClickModifier) && tripleClickAction !== "NONE") {
-        void executeAction(tripleClickAction, msg, channel, event);
-      }
-      return;
+  const isOwnMessage = context.message.author?.id === getCurrentUserId();
+  const clickTimeout = getSetting("clickTimeout", 300);
+  const singleAction = getSingleClickAction(isOwnMessage);
+  const doubleAction = getDoubleClickAction(isOwnMessage);
+  const tripleAction = getSetting("tripleClickAction", "REACT") as ClickAction;
+  const singleModifier = getSingleClickModifier(isOwnMessage);
+  const doubleModifier = getSetting("doubleClickModifier", "NONE") as Modifier;
+  const tripleModifier = getSetting("tripleClickModifier", "NONE") as Modifier;
+  const deferDoubleForTriple = getSetting("deferDoubleClickForTriple", true);
+
+  if (event.detail === 3) {
+    clearSingleClickTimer();
+    if (deferDoubleForTriple && isModifierActive(tripleModifier) && tripleAction !== "NONE") {
+      void executeAction(tripleAction, context.message, context.channel, event);
     }
+    return;
+  }
 
-    if (event.detail === 2) {
-      if (singleClickTimer) {
-        clearTimeout(singleClickTimer);
-        singleClickTimer = null;
-      }
-      if (!isModifierActive(doubleClickModifier) && doubleClickModifier !== "NONE") return;
-      if (doubleClickAction === "NONE" || !canSend(channel) || msg.deleted) return;
+  if (event.detail === 2) {
+    clearSingleClickTimer();
+    if (doubleModifier !== "NONE" && !isModifierActive(doubleModifier)) return;
+    if (doubleAction === "NONE" || !canSend(context.channel) || context.message.deleted) return;
+    void executeAction(doubleAction, context.message, context.channel, event);
+    return;
+  }
 
-      void executeAction(doubleClickAction, msg, channel, event);
-      event.preventDefault();
-      return;
-    }
+  if (event.detail !== 1 || singleAction === "NONE") return;
 
-    if (event.detail === 1) {
-      if (singleClickModifier === "NONE" && doubleClickAction !== "NONE") {
-        const capturedMsg = msg;
-        const capturedChannel = channel;
-        const capturedEvent = event;
-        singleClickTimer = setTimeout(() => {
-          singleClickTimer = null;
-          if (isModifierActive(singleClickModifier) && singleClickAction !== "NONE") {
-            void executeAction(singleClickAction, capturedMsg, capturedChannel, capturedEvent);
-          }
-        }, clickTimeout);
-      } else if (isModifierActive(singleClickModifier) && singleClickAction !== "NONE") {
-        void executeAction(singleClickAction, msg, channel, event);
-      }
-    }
-  } catch {}
+  if (singleModifier === "NONE" && doubleAction !== "NONE") {
+    scheduleSingleClick(singleAction, singleModifier, context, event, clickTimeout);
+    return;
+  }
+
+  if (isModifierActive(singleModifier)) {
+    void executeAction(singleAction, context.message, context.channel, event);
+  }
 }
 
 export function onMessageClick(event: MouseEvent) {
   const context = getMessageContextFromEvent(event);
   if (!context) return;
-  handleMessageClick(event, context.message, context.channel);
+  try {
+    handleResolvedMessageClick(event, context);
+  } catch {}
 }
 
-function install() {
-  if (listenerInstalled) return;
-  listenerInstalled = true;
+function installListeners() {
+  if (installed) return;
+  installed = true;
 
+  document.addEventListener("mousedown", () => {
+    lastMouseDownTime = Date.now();
+  });
+  document.addEventListener("keydown", (event) => setPressedKey(event, true));
+  document.addEventListener("keyup", (event) => setPressedKey(event, false));
+  window.addEventListener("blur", clearPressedKeys);
   document.addEventListener("click", onMessageClick, true);
 }
 
-document.addEventListener("keydown", keydown);
-document.addEventListener("keyup", keyup);
-window.addEventListener("blur", blur);
-
-ensureStores();
-install();
+ensureRuntimeModules();
+installListeners();

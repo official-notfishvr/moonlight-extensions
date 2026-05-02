@@ -1,14 +1,13 @@
-import { ChannelStore, GuildStore, PermissionStore } from "@moonlight-mod/wp/common_stores";
+import { ChannelStore, GuildStore } from "@moonlight-mod/wp/common_stores";
 import { Permissions } from "@moonlight-mod/wp/discord/Constants";
+import GuildMemberStore from "@moonlight-mod/wp/discord/stores/GuildMemberStore";
 import SelectedChannelStore from "@moonlight-mod/wp/discord/stores/SelectedChannelStore";
 
 const EXT_ID = "moreUserTags";
 const TAG_CLASS = "mut-tag";
-
-function getSetting<T>(name: string, fallback: T): T {
-  const val = moonlight.getConfigOption<T>(EXT_ID, name);
-  return val !== undefined ? val : fallback;
-}
+const MEMBER_ITEM_SELECTOR = '[class*="member_"]';
+const MEMBER_GROUP_SELECTOR = '[class*="groupTitle_"]';
+const MEMBER_NAME_SELECTOR = '[class*="nameAndDecorators"], [class*="name_"]';
 
 const PermissionBits = {
   ADMINISTRATOR: Permissions.ADMINISTRATOR,
@@ -25,31 +24,20 @@ const PermissionBits = {
 } as const;
 
 type PermissionName = keyof typeof PermissionBits;
-
-const ALL_PERMS: PermissionName[] = [
-  "ADMINISTRATOR",
-  "MANAGE_GUILD",
-  "MANAGE_CHANNELS",
-  "MANAGE_ROLES",
-  "MANAGE_MESSAGES",
-  "KICK_MEMBERS",
-  "BAN_MEMBERS",
-  "MOVE_MEMBERS",
-  "MUTE_MEMBERS",
-  "DEAFEN_MEMBERS",
-  "MODERATE_MEMBERS"
-];
-
-const tags: Array<{
+type UserTag = {
   name: string;
   displayName: string;
-  condition?: (u: any, c: any) => boolean;
+  condition?: (user: any, channel: any) => boolean;
   permissions?: PermissionName[];
-}> = [
+};
+
+const ALL_PERMISSIONS: PermissionName[] = Object.keys(PermissionBits) as PermissionName[];
+
+const USER_TAGS: UserTag[] = [
   {
     name: "OWNER",
     displayName: "Owner",
-    condition: (u: any, c: any) => GuildStore?.getGuild?.(c?.guild_id)?.ownerId === u?.id
+    condition: (user, channel) => GuildStore?.getGuild?.(channel?.guild_id)?.ownerId === user?.id
   },
   {
     name: "ADMINISTRATOR",
@@ -78,89 +66,171 @@ const tags: Array<{
   }
 ];
 
-function getPermissions(user: any, channel: any): PermissionName[] {
-  const guildId = channel?.guild_id;
-  const guild = GuildStore.getGuild?.(guildId);
-  if (!guild) return [];
-  if (guild.ownerId === user?.id) return ALL_PERMS;
+function getSetting<T>(name: string, fallback: T): T {
+  const value = moonlight.getConfigOption<T>(EXT_ID, name);
+  return value !== undefined ? value : fallback;
+}
 
-  const result: PermissionName[] = [];
-  for (const perm of ALL_PERMS) {
+function getSelectedGuildChannel() {
+  const channelId = SelectedChannelStore?.getChannelId?.();
+  const channel = ChannelStore?.getChannel?.(channelId);
+  return channel?.guild_id ? channel : null;
+}
+
+function getGuildRole(guild: any, roleId: string) {
+  const roles = guild?.roles;
+  if (!roles || !roleId) return null;
+
+  if (typeof roles.get === "function") {
+    return roles.get(roleId) ?? null;
+  }
+
+  if (Array.isArray(roles)) {
+    return roles.find((role: any) => role?.id === roleId) ?? null;
+  }
+
+  return roles[roleId] ?? null;
+}
+
+function getGuildMember(user: any, channel: any) {
+  try {
+    return GuildMemberStore?.getMember?.(channel.guild_id, user?.id) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function getUserPermissions(user: any, channel: any): PermissionName[] {
+  const guild = GuildStore.getGuild?.(channel?.guild_id);
+  if (!guild) return [];
+  if (guild.ownerId === user?.id) return ALL_PERMISSIONS;
+
+  const member = getGuildMember(user, channel);
+  if (!member) return [];
+
+  const roleIds = Array.isArray(member?.roles) ? member.roles : [];
+  let permissionBits = 0n;
+
+  const everyoneRole = getGuildRole(guild, channel.guild_id);
+  if (everyoneRole) {
     try {
-      if (PermissionStore.can?.(PermissionBits[perm], channel, user)) {
-        result.push(perm);
+      permissionBits |= BigInt(everyoneRole.permissions ?? 0);
+    } catch {}
+  }
+
+  for (const roleId of roleIds) {
+    const role = getGuildRole(guild, roleId);
+    if (!role) continue;
+
+    try {
+      permissionBits |= BigInt(role.permissions ?? 0);
+    } catch {}
+  }
+
+  const permissions: PermissionName[] = [];
+  for (const permission of ALL_PERMISSIONS) {
+    try {
+      const permissionBit = BigInt(PermissionBits[permission]);
+      if ((permissionBits & permissionBit) === permissionBit) {
+        permissions.push(permission);
       }
     } catch {}
   }
 
-  return result;
+  return permissions;
+}
+
+function getReactFiber(node: Element): any {
+  for (const key in node) {
+    if (key.startsWith("__reactFiber$") || key.startsWith("__reactInternalInstance$")) {
+      return (node as any)[key];
+    }
+  }
+  return null;
+}
+
+function getMemberUser(memberNode: Element) {
+  let fiber = getReactFiber(memberNode);
+  let depth = 0;
+
+  while (fiber && depth < 30) {
+    const user = fiber.memoizedProps?.user ?? fiber.pendingProps?.user;
+    if (user) return user;
+    fiber = fiber.return;
+    depth++;
+  }
+
+  return null;
+}
+
+function getApplicableTag(user: any, channel: any): UserTag | null {
+  if (user.bot && getSetting("dontShowForBots", false)) return null;
+
+  const permissions = getUserPermissions(user, channel);
+  for (const tag of USER_TAGS) {
+    if (!getSetting(`showOutsideChat_${tag.name}`, true)) continue;
+
+    if (tag.condition?.(user, channel)) return tag;
+    if (tag.permissions?.some((permission) => permissions.includes(permission))) return tag;
+  }
+
+  return null;
+}
+
+function getTagContainer(memberNode: Element): Element {
+  return memberNode.querySelector(MEMBER_NAME_SELECTOR) ?? memberNode;
+}
+
+function syncTagElement(container: Element, user: any, channel: any, tag: UserTag | null) {
+  const existing = container.querySelector(`.${TAG_CLASS}`) as HTMLSpanElement | null;
+  const tagText = tag ? getSetting(`tagText_${tag.name}`, tag.displayName) : null;
+
+  if (!tag || !tagText) {
+    existing?.remove();
+    return;
+  }
+
+  if (
+    existing &&
+    existing.dataset.uid === user.id &&
+    existing.dataset.cid === channel.id &&
+    existing.textContent === tagText
+  ) {
+    return;
+  }
+
+  existing?.remove();
+
+  const badge = document.createElement("span");
+  badge.className = TAG_CLASS;
+  badge.dataset.uid = user.id;
+  badge.dataset.cid = channel.id;
+  badge.textContent = tagText;
+  badge.style.backgroundColor = "var(--brand-experiment)";
+  badge.style.color = "white";
+  badge.style.borderRadius = "3px";
+  badge.style.padding = "0 4px";
+  badge.style.marginLeft = "4px";
+  badge.style.fontSize = "10px";
+  badge.style.fontWeight = "bold";
+  badge.style.verticalAlign = "middle";
+  badge.style.display = "inline-block";
+  container.appendChild(badge);
 }
 
 function processMemberList() {
-  const channelId = SelectedChannelStore?.getChannelId?.();
-  const channel = ChannelStore?.getChannel?.(channelId);
-  if (!channel?.guild_id) return;
+  const channel = getSelectedGuildChannel();
+  if (!channel) return;
 
-  const items = document.querySelectorAll('[class*="member_"]');
-  for (const item of items) {
-    if (item.querySelector('[class*="groupTitle_"]')) continue;
+  const members = document.querySelectorAll(MEMBER_ITEM_SELECTOR);
+  for (const member of members) {
+    if (member.querySelector(MEMBER_GROUP_SELECTOR)) continue;
 
-    const target = item.querySelector('[class*="nameAndDecorators"]') || item.querySelector('[class*="name_"]') || item;
-    const fiberKey = Object.keys(item).find(
-      (key) => key.startsWith("__reactFiber$") || key.startsWith("__reactInternalInstance$")
-    );
-
-    let fiber = fiberKey ? (item as any)[fiberKey] : null;
-    let user = null;
-    let depth = 0;
-    while (fiber && !user && depth < 30) {
-      user = fiber.memoizedProps?.user || fiber.pendingProps?.user;
-      fiber = fiber.return;
-      depth++;
-    }
-
+    const user = getMemberUser(member);
     if (!user) continue;
-    if (user.bot && getSetting<boolean>("dontShowForBots", false)) continue;
 
-    const existing = target.querySelector("." + TAG_CLASS);
-    if (existing) {
-      if (existing.getAttribute("data-uid") === user.id && existing.getAttribute("data-cid") === channel.id) continue;
-      existing.remove();
-    }
-
-    const perms = getPermissions(user, channel);
-    let tag = null;
-    for (const candidate of tags) {
-      if (!getSetting<boolean>(`showOutsideChat_${candidate.name}`, true)) continue;
-
-      if (candidate.condition) {
-        if (candidate.condition(user, channel)) {
-          tag = candidate;
-          break;
-        }
-      } else if (candidate.permissions?.some((perm) => perms.includes(perm))) {
-        tag = candidate;
-        break;
-      }
-    }
-
-    if (!tag) continue;
-
-    const span = document.createElement("span");
-    span.className = TAG_CLASS;
-    span.setAttribute("data-uid", user.id);
-    span.setAttribute("data-cid", channel.id);
-    span.textContent = getSetting<string>(`tagText_${tag.name}`, tag.displayName);
-    span.style.backgroundColor = "var(--brand-experiment)";
-    span.style.color = "white";
-    span.style.borderRadius = "3px";
-    span.style.padding = "0 4px";
-    span.style.marginLeft = "4px";
-    span.style.fontSize = "10px";
-    span.style.fontWeight = "bold";
-    span.style.verticalAlign = "middle";
-    span.style.display = "inline-block";
-    target.appendChild(span);
+    const tag = getApplicableTag(user, channel);
+    syncTagElement(getTagContainer(member), user, channel, tag);
   }
 }
 

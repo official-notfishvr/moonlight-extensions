@@ -8,6 +8,7 @@ export const webpackModules: ExtensionWebExports["webpackModules"] = {
     dependencies: [
       { id: "react" },
       { ext: "common", id: "stores" },
+      { id: "discord/stores/GuildMemberStore" },
       { id: "discord/stores/SelectedChannelStore" },
       { id: "discord/Constants" }
     ]
