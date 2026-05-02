@@ -9,27 +9,20 @@ import {
 import { openModal } from "@moonlight-mod/wp/discord/modules/modals/Modals";
 import { showToast } from "@moonlight-mod/wp/discord/design/components/Toast/web/ToastAPI";
 import { createToast } from "@moonlight-mod/wp/discord/design/components/Toast/web/Toast";
+import { ToastType } from "@moonlight-mod/wp/discord/design/components/Toast/web/ToastConstants";
 import { Button, Looks, Colors } from "@moonlight-mod/wp/discord/uikit/legacy/Button";
+import ClipboardUtils from "@moonlight-mod/wp/discord/utils/ClipboardUtils";
 
 import contextMenu from "@moonlight-mod/wp/contextMenu_contextMenu";
 
 function copyToClipboard(text: string) {
-  if (navigator.clipboard?.writeText) {
-    navigator.clipboard.writeText(text);
-  } else {
-    const el = document.createElement("textarea");
-    el.value = text;
-    document.body.appendChild(el);
-    el.select();
-    document.execCommand("copy");
-    document.body.removeChild(el);
-  }
+  ClipboardUtils.copy(text);
 }
 
 function copyWithToast(text: string, msg?: string) {
   copyToClipboard(text);
   try {
-    showToast(createToast(msg ?? "Copied to clipboard!", 0));
+    showToast(createToast(msg ?? "Copied to clipboard!", ToastType.SUCCESS));
   } catch {}
 }
 

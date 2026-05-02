@@ -11,7 +11,7 @@
     "source": "https://github.com/official-notfishvr/moonlight-extensions",
     "tags": ["chat", "utility"]
   },
-  "dependencies": ["contextMenu", "spacepack"],
+  "dependencies": ["componentEditor", "contextMenu", "spacepack"],
   "settings": {
     "deleteStyle": {
       "type": "string",

@@ -1,121 +1,246 @@
+import { AuthenticationStore, ChannelStore } from "@moonlight-mod/wp/common_stores";
+import Messages from "@moonlight-mod/wp/componentEditor_messages";
+import contextMenu from "@moonlight-mod/wp/contextMenu_contextMenu";
+import { MessageFlags } from "@moonlight-mod/wp/discord/Constants";
+import Dispatcher from "@moonlight-mod/wp/discord/Dispatcher";
 import React from "@moonlight-mod/wp/react";
 import { createMessageDiff, DiffPart } from "@moonlight-mod/wp/messageLogger_diffUtils";
 import spacepack from "@moonlight-mod/wp/spacepack_spacepack";
-import contextMenu from "@moonlight-mod/wp/contextMenu_contextMenu";
 
 const EXT_ID = "messageLogger";
-let Dispatcher: any = null;
+
+type EditEntry = {
+  timestamp: Date;
+  content: string;
+  original: boolean;
+};
+
+type DeletedEntry = {
+  timestamp: Date;
+};
+
+const deletedMessages = new Map<string, DeletedEntry>();
+const messageEdits = new Map<string, EditEntry[]>();
+const listeners = new Set<() => void>();
+const ChannelMessages = spacepack.require("discord/lib/ChannelMessages").default;
+const EMPTY_EDITS: EditEntry[] = [];
+const EMPTY_MESSAGE_STATE = {
+  deleted: null as DeletedEntry | null,
+  edits: EMPTY_EDITS
+};
 
 function getSetting<T>(name: string, fallback: T): T {
   const val = moonlight.getConfigOption<T>(EXT_ID, name);
   return val !== undefined ? val : fallback;
 }
 
-function getDispatcher(): any {
-  if (Dispatcher) return Dispatcher;
-  try {
-    if (!("discord/Dispatcher" in (spacepack.modules ?? {})) && !("discord/Dispatcher" in (spacepack.cache ?? {}))) {
-      return null;
-    }
-    const mod = spacepack.require("discord/Dispatcher");
-    Dispatcher = mod?.default ?? mod;
-  } catch {
-    Dispatcher = null;
-  }
-  return Dispatcher;
-}
-
-function findStore(name: string): any {
-  try {
-    const mappedId = `discord/stores/${name}`;
-    if (!(mappedId in (spacepack.modules ?? {})) && !(mappedId in (spacepack.cache ?? {}))) throw new Error();
-    const mapped = spacepack.require(mappedId);
-    const mappedExport = mapped?.default ?? mapped;
-    if (mappedExport?.getName?.() === name) return mappedExport;
-    for (const key of Object.keys(mappedExport ?? {})) {
-      if (mappedExport[key]?.getName?.() === name) return mappedExport[key];
-    }
-  } catch {}
-
-  try {
-    const mod = spacepack.findByCode(`"${name}"`)[0]?.exports;
-    if (mod?.default?.getName?.() === name) return mod.default;
-    if (mod?.getName?.() === name) return mod;
-    for (const key of Object.keys(mod ?? {})) {
-      if (mod[key]?.getName?.() === name) return mod[key];
-    }
-    return mod?.default ?? mod;
-  } catch {
-    return null;
-  }
-}
-
-function cloneMessageForUpdate(message: any): any {
-  const next = { ...message };
-  next.attachments = Array.isArray(message?.attachments)
-    ? message.attachments.map((attachment: any) => ({ ...attachment }))
-    : message.attachments;
-  return next;
-}
-
-function markDeletedMessage(message: any): any {
-  const next = cloneMessageForUpdate(message);
-  next.deleted = true;
-  if (Array.isArray(next.attachments)) {
-    next.attachments = next.attachments.map((attachment: any) => ({
-      ...attachment,
-      deleted: true
-    }));
-  }
-  return next;
-}
-
-function getMessageStore(): any {
-  return findStore("MessageStore");
-}
-
-function getStoredMessage(channelId: string | undefined, messageId: string | undefined): any {
+function getKey(channelId: string | undefined, messageId: string | undefined): string | null {
   if (!channelId || !messageId) return null;
+  return `${channelId}:${messageId}`;
+}
 
-  const store = getMessageStore();
-  if (!store) return null;
+function parseRowKey(id: string): string | null {
+  const prefix = "chat-messages-";
+  if (!id.startsWith(prefix)) return null;
 
+  const rest = id.slice(prefix.length);
+  const lastDash = rest.lastIndexOf("-");
+  if (lastDash === -1) return null;
+
+  const channelId = rest.slice(0, lastDash);
+  const messageId = rest.slice(lastDash + 1);
+  return getKey(channelId, messageId);
+}
+
+function notify() {
+  syncDeletedMessageClasses();
+  for (const listener of listeners) {
+    try {
+      listener();
+    } catch {}
+  }
+}
+
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+function useMessageState(channelId: string | undefined, messageId: string | undefined) {
+  const key = getKey(channelId, messageId);
+
+  const deleted = React.useSyncExternalStore(
+    subscribe,
+    () => (key ? (deletedMessages.get(key) ?? null) : null),
+    () => null
+  );
+
+  const edits = React.useSyncExternalStore(
+    subscribe,
+    () => (key ? (messageEdits.get(key) ?? EMPTY_EDITS) : EMPTY_EDITS),
+    () => EMPTY_EDITS
+  );
+
+  return React.useMemo(() => {
+    if (!deleted && edits === EMPTY_EDITS) return EMPTY_MESSAGE_STATE;
+    return { deleted, edits };
+  }, [deleted, edits]);
+}
+
+function syncDeletedMessageClasses() {
+  const rows = document.querySelectorAll<HTMLElement>('[id^="chat-messages-"]');
+  for (const row of rows) {
+    const key = parseRowKey(row.id);
+    const isDeleted = key != null && deletedMessages.has(key);
+    row.classList.toggle("messagelogger-deleted", isDeleted);
+  }
+}
+
+let observerInstalled = false;
+
+function installObserver() {
+  if (observerInstalled) return;
+  observerInstalled = true;
+
+  const run = () => {
+    try {
+      syncDeletedMessageClasses();
+    } catch {}
+  };
+
+  run();
+
+  const observer = new MutationObserver(run);
+  observer.observe(document.body, { childList: true, subtree: true });
+  setInterval(run, 1000);
+}
+
+function formatTimestamp(ts: Date | string | number): string {
+  const date = new Date(ts);
+  if (Number.isNaN(date.getTime())) return String(ts);
+  return date.toLocaleString();
+}
+
+export function shouldIgnore(message: any, isEdit = false): boolean {
   try {
-    return store.getMessage?.(channelId, messageId) ?? null;
+    const ignoreBots = getSetting<boolean>("ignoreBots", false);
+    const ignoreSelf = getSetting<boolean>("ignoreSelf", false);
+    const ignoreUsers = getSetting<string>("ignoreUsers", "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const ignoreChannels = getSetting<string>("ignoreChannels", "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const ignoreGuilds = getSetting<string>("ignoreGuilds", "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    const currentUserId = AuthenticationStore?.getId?.() ?? "";
+
+    if (ignoreBots && message.author?.bot) return true;
+    if (ignoreSelf && message.author?.id === currentUserId) return true;
+    if (ignoreUsers.includes(message.author?.id)) return true;
+    if (ignoreChannels.includes(message.channel_id)) return true;
+
+    const channel = ChannelStore?.getChannel?.(message.channel_id);
+    if (channel) {
+      if (ignoreChannels.includes(channel.parent_id)) return true;
+      if (ignoreGuilds.includes(channel.guild_id)) return true;
+    }
+
+    if (isEdit && !getSetting<boolean>("logEdits", true)) return true;
+    if (!isEdit && !getSetting<boolean>("logDeletes", true)) return true;
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function getChannelMessages(channelId: string): any {
+  return (ChannelMessages as any)?._channelMessages?.[channelId] ?? null;
+}
+
+function getStoredMessage(channelId: string, messageId: string): any {
+  try {
+    return getChannelMessages(channelId)?.get?.(messageId) ?? null;
   } catch {
     return null;
   }
 }
 
-function dispatchSyntheticMessageUpdate(message: any) {
-  getDispatcher()?.dispatch?.({
-    type: "MESSAGE_UPDATE",
-    message,
-    mlPatched: true
+function markDeleted(channelId: string, messageId: string, message: any) {
+  const key = getKey(channelId, messageId);
+  if (!key) return;
+
+  deletedMessages.set(key, {
+    timestamp: new Date()
   });
+
+  if (Array.isArray(message?.attachments)) {
+    for (const attachment of message.attachments) {
+      attachment.deleted = true;
+    }
+  }
+
+  try {
+    message.deleted = true;
+    message.deleted_timestamp = new Date();
+  } catch {}
+  notify();
+}
+
+function recordEdit(message: any, oldMessage: any) {
+  const key = getKey(message?.channel_id, message?.id);
+  if (!key) return;
+
+  const edits = messageEdits.get(key) ?? [];
+  edits.push({
+    timestamp: new Date(message.edited_timestamp),
+    content: oldMessage.content,
+    original: oldMessage.editedTimestamp == null
+  });
+  messageEdits.set(key, edits);
+  notify();
+}
+
+function removeTrackedMessage(channelId: string, messageId: string) {
+  const key = getKey(channelId, messageId);
+  if (!key) return;
+  deletedMessages.delete(key);
+  messageEdits.delete(key);
+  notify();
 }
 
 function handleDeleteEvent(event: any): boolean {
-  const stored = getStoredMessage(event.channelId, event.id);
-  if (!stored) return false;
-  if (event.mlDeleted || shouldIgnore(stored)) return false;
+  if (event?._messageLogger_force) {
+    removeTrackedMessage(event.channelId, event.id);
+    return false;
+  }
 
-  dispatchSyntheticMessageUpdate(markDeletedMessage(stored));
-  console.log("[MessageLogger] Deleted message preserved:", event.id, "channel:", event.channelId);
+  const message = getStoredMessage(event.channelId, event.id);
+  if (!message || shouldIgnore(message)) return false;
+  if ((message.flags & MessageFlags.EPHEMERAL) === MessageFlags.EPHEMERAL) return false;
+  if (message.state === "SEND_FAILED") return false;
+
+  markDeleted(event.channelId, event.id, message);
   return true;
 }
 
 function handleBulkDeleteEvent(event: any): boolean {
   const ids = Array.isArray(event.ids) ? event.ids : [];
-  if (ids.length === 0) return false;
-
   let blocked = false;
-  for (const id of ids) {
-    const stored = getStoredMessage(event.channelId, id);
-    if (!stored || shouldIgnore(stored)) continue;
 
-    dispatchSyntheticMessageUpdate(markDeletedMessage(stored));
-    console.log("[MessageLogger] Deleted message preserved:", id, "channel:", event.channelId);
+  for (const id of ids) {
+    const message = getStoredMessage(event.channelId, id);
+    if (!message || shouldIgnore(message)) continue;
+    if ((message.flags & MessageFlags.EPHEMERAL) === MessageFlags.EPHEMERAL) continue;
+    if (message.state === "SEND_FAILED") continue;
+
+    markDeleted(event.channelId, id, message);
     blocked = true;
   }
 
@@ -123,289 +248,182 @@ function handleBulkDeleteEvent(event: any): boolean {
 }
 
 function handleMessageUpdateEvent(event: any) {
-  const nextMessage = event?.message;
-  if (!nextMessage || event?.mlPatched) return;
+  const message = event?.message;
+  if (!message || event?._messageLogger_internal) return false;
+  if (shouldIgnore(message, true)) return false;
 
-  const stored = getStoredMessage(nextMessage.channel_id, nextMessage.id);
-  if (!stored) return;
+  const oldMessage = getStoredMessage(message.channel_id, message.id);
+  if (!oldMessage) return false;
+  if (!message.edited_timestamp || oldMessage.content === message.content) return false;
 
-  if (stored.deleted !== undefined) nextMessage.deleted = stored.deleted;
-  if (stored.editHistory !== undefined) nextMessage.editHistory = [...(stored.editHistory ?? [])];
-  if (stored.firstEditTimestamp !== undefined) nextMessage.firstEditTimestamp = stored.firstEditTimestamp;
-  if (stored.diffViewDisabled !== undefined) nextMessage.diffViewDisabled = stored.diffViewDisabled;
-
-  const EPHEMERAL = 64;
-  if ((nextMessage.flags & EPHEMERAL) === EPHEMERAL || shouldIgnore(nextMessage, true)) return;
-  if (!nextMessage.edited_timestamp || nextMessage.content === stored.content) return;
-
-  nextMessage.editHistory = [...(stored.editHistory ?? []), makeEdit(nextMessage, stored)];
-  nextMessage.firstEditTimestamp ??= stored.firstEditTimestamp ?? stored.editedTimestamp ?? stored.timestamp;
-}
-
-let interceptorInstalled = false;
-let interceptorInstallScheduled = false;
-
-function installDispatcherInterceptor() {
-  if (interceptorInstalled) return;
-  interceptorInstalled = true;
-
-  const dispatcher = getDispatcher();
-  if (!dispatcher?.addInterceptor) {
-    interceptorInstalled = false;
-    return;
-  }
-
-  dispatcher.addInterceptor((event: any) => {
-    switch (event?.type) {
-      case "MESSAGE_DELETE":
-        return handleDeleteEvent(event);
-      case "MESSAGE_DELETE_BULK":
-        return handleBulkDeleteEvent(event);
-      case "MESSAGE_UPDATE":
-        handleMessageUpdateEvent(event);
-        return false;
-      default:
-        return false;
-    }
-  });
-}
-
-function scheduleDispatcherInterceptor() {
-  if (interceptorInstallScheduled) return;
-  interceptorInstallScheduled = true;
-
-  setTimeout(() => {
-    try {
-      installDispatcherInterceptor();
-    } catch (error) {
-      console.error("[MessageLogger] Failed to install dispatcher interceptor:", error);
-    }
-  }, 0);
-}
-
-function applyDeleteStyle() {
-  const style = getSetting<string>("deleteStyle", "text");
-  document.body.setAttribute("data-ml-delete-style", style);
-}
-
-applyDeleteStyle();
-scheduleDispatcherInterceptor();
-
-function formatTimestamp(ts: Date | string | number): string {
-  if (!ts) return "";
-  const d = new Date(ts);
-  if (isNaN(d.getTime())) return String(ts);
-  return d.toLocaleString();
-}
-
-export function shouldIgnore(message: any, isEdit: boolean = false): boolean {
-  try {
-    const ignoreBots = getSetting<boolean>("ignoreBots", false);
-    const ignoreSelf = getSetting<boolean>("ignoreSelf", false);
-    const ignoreUsersStr = getSetting<string>("ignoreUsers", "");
-    const ignoreChannelsStr = getSetting<string>("ignoreChannels", "");
-    const ignoreGuildsStr = getSetting<string>("ignoreGuilds", "");
-    const logEdits = getSetting<boolean>("logEdits", true);
-    const logDeletes = getSetting<boolean>("logDeletes", true);
-
-    const ignoreUsers = ignoreUsersStr
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    const ignoreChannels = ignoreChannelsStr
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    const ignoreGuilds = ignoreGuildsStr
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-
-    let currentUserId = "";
-    try {
-      const userStore = findStore("UserStore");
-      const user = userStore?.getCurrentUser?.();
-      if (user) currentUserId = user.id;
-    } catch {}
-
-    if (ignoreBots && message.author?.bot) return true;
-    if (ignoreSelf && message.author?.id === currentUserId) return true;
-    if (ignoreUsers.includes(message.author?.id)) return true;
-    if (ignoreChannels.includes(message.channel_id)) return true;
-
-    try {
-      const channelStore = findStore("ChannelStore");
-      const channel = channelStore?.getChannel?.(message.channel_id);
-      if (channel) {
-        if (ignoreChannels.includes(channel.parent_id)) return true;
-        if (ignoreGuilds.includes(channel.guild_id)) return true;
-      }
-    } catch {}
-
-    if (isEdit && !logEdits) return true;
-    if (!isEdit && !logDeletes) return true;
-
-    return false;
-  } catch {
-    return false;
-  }
-}
-
-export function handleDelete(
-  cache: any,
-  data: { ids?: string[]; id?: string; channelId?: string; mlDeleted?: boolean },
-  isBulk: boolean
-): any {
-  try {
-    if (cache == null) return cache;
-    if (!isBulk && data.id && !cache.has(data.id)) return cache;
-
-    const mutate = (id: string) => {
-      const msg = cache.get(id);
-      if (!msg) return;
-
-      const EPHEMERAL = 64;
-      const skip = data.mlDeleted || (msg.flags & EPHEMERAL) === EPHEMERAL || shouldIgnore(msg);
-
-      if (skip) {
-        cache = cache.remove(id);
-      } else {
-        cache = cache.update(id, (m: any) =>
-          m.set("deleted", true).set(
-            "attachments",
-            m.attachments.map((a: any) => {
-              a.deleted = true;
-              return a;
-            })
-          )
-        );
-        console.log("[MessageLogger] Deleted message preserved:", id, "channel:", data.channelId || "(unknown)");
-      }
-    };
-
-    if (isBulk && data.ids) {
-      data.ids.forEach(mutate);
-    } else if (data.id) {
-      mutate(data.id);
-    }
-  } catch (e) {
-    console.error("[MessageLogger] Error in handleDelete:", e);
-  }
-  return cache;
-}
-
-export function makeEdit(
-  newMessage: { edited_timestamp: string },
-  oldMessage: { content: string }
-): { timestamp: Date; content: string } {
-  console.log("[MessageLogger] Edit recorded, old content:", oldMessage.content);
-  return {
-    timestamp: new Date(newMessage.edited_timestamp),
-    content: oldMessage.content
-  };
+  recordEdit(message, oldMessage);
+  return false;
 }
 
 function createDiffElement(part: DiffPart, key: React.Key): React.ReactElement {
-  let className: string | undefined = undefined;
+  let className: string | undefined;
   if (part.type === "added") className = "messagelogger-diff-added";
   else if (part.type === "removed") className = "messagelogger-diff-removed";
   return React.createElement("span", { key, className }, part.text);
 }
 
-function renderDiffElements(diffParts: DiffPart[]): React.ReactElement[] {
-  return diffParts.map((part, index) => createDiffElement(part, index));
-}
-
-export function parseEditContent(
-  content: string,
-  message: { id: string; channel_id: string; content?: string },
-  previousContent?: string
-): React.ReactNode {
-  const showDiffs = getSetting<boolean>("showEditDiffs", true);
-
-  if (previousContent && content !== previousContent && showDiffs) {
-    const diffParts = createMessageDiff(content, previousContent);
-    return React.createElement("span", null, ...renderDiffElements(diffParts));
+function renderDiff(content: string, previousContent?: string) {
+  if (!previousContent || !getSetting<boolean>("showEditDiffs", true)) {
+    return React.createElement("span", null, content);
   }
 
-  return React.createElement("span", null, content);
+  const diff = createMessageDiff(previousContent, content);
+  return React.createElement("span", null, ...diff.map((part, index) => createDiffElement(part, index)));
 }
 
-export function renderEdits(props: { message: any }): React.ReactNode {
-  try {
-    const msg = props.message;
-    if (!msg || !msg.editHistory || msg.editHistory.length === 0) return null;
+function DeletedBadge(props: any) {
+  const state = useMessageState(props.message?.channel_id, props.message?.id);
+  if (!state.deleted) return null;
 
-    const inlineEdits = getSetting<boolean>("inlineEdits", true);
-    if (!inlineEdits) return null;
+  return React.createElement(
+    "span",
+    {
+      className: "messagelogger-badge"
+    },
+    "Deleted"
+  );
+}
 
-    const history: Array<{ timestamp: Date; content: string }> = msg.editHistory;
-    const elements = history.map((edit, idx) => {
-      const nextContent = idx === history.length - 1 ? msg.content : history[idx + 1]?.content;
-      const parsed = parseEditContent(edit.content, msg, nextContent);
-      const ts = formatTimestamp(edit.timestamp);
+function MessageLoggerAccessory(props: any) {
+  const message = props.message;
+  const state = useMessageState(message?.channel_id, message?.id);
+  if (!state.deleted && state.edits.length === 0) return null;
 
+  const children: React.ReactNode[] = [];
+
+  if (state.deleted) {
+    children.push(
+      React.createElement(
+        "div",
+        {
+          key: "deleted",
+          className: "messagelogger-meta"
+        },
+        React.createElement("span", null, "Deleted at ", formatTimestamp(state.deleted.timestamp))
+      )
+    );
+  }
+
+  if (getSetting<boolean>("inlineEdits", true) && state.edits.length > 0) {
+    const entries = state.edits.map((edit, index) => {
+      const nextContent = index === state.edits.length - 1 ? message.content : state.edits[index + 1]?.content;
       return React.createElement(
         "div",
-        { key: "ml-edit-" + idx, className: "messagelogger-edited" },
-        parsed,
+        {
+          key: "edit-" + index,
+          className: "messagelogger-edited"
+        },
+        renderDiff(edit.content, nextContent),
+        " ",
         React.createElement(
           "span",
           {
             className: "messagelogger-history-timestamp",
-            style: { fontSize: "0.625rem", color: "var(--text-muted)", marginLeft: "4px" }
+            title: formatTimestamp(edit.timestamp)
           },
-          "(edited ",
-          ts,
+          edit.original ? "(original " : "(past edit ",
+          formatTimestamp(edit.timestamp),
           ")"
         )
       );
     });
 
-    return React.createElement("div", { key: "ml-edit-history-" + msg.id }, ...elements);
-  } catch (e) {
-    console.error("[MessageLogger] Error rendering edits:", e);
-    return null;
+    children.push(
+      React.createElement(
+        "div",
+        {
+          key: "edits",
+          className: "messagelogger-diff-view"
+        },
+        ...entries
+      )
+    );
   }
-}
-
-export function EditMarker(props: {
-  message: any;
-  className?: string;
-  children?: React.ReactNode;
-  [key: string]: any;
-}): React.ReactElement {
-  const { message, className, children, ...rest } = props;
-  const classes = ["messagelogger-edit-marker"];
-  if (className) classes.push(className);
 
   return React.createElement(
-    "span",
+    "div",
     {
-      ...rest,
-      className: classes.join(" "),
-      onClick: () => openHistoryModal(message),
-      role: "button"
+      className: "messagelogger-accessory"
     },
-    children
+    ...children
   );
 }
 
 export function openHistoryModal(message: any): void {
-  if (!message || !message.editHistory || message.editHistory.length === 0) {
+  const key = getKey(message?.channel_id, message?.id);
+  const edits = key ? (messageEdits.get(key) ?? []) : [];
+  if (edits.length === 0) {
     console.log("[MessageLogger] No edit history available for this message.");
     return;
   }
 
-  const history = message.editHistory;
   let logOutput = "[MessageLogger] Edit History for message " + message.id + ":\n";
-  const firstTs = message.firstEditTimestamp || message.editedTimestamp || message.timestamp;
-  logOutput += "  Original at " + formatTimestamp(firstTs) + "\n";
-  history.forEach((edit: any, idx: number) => {
+  edits.forEach((edit, idx) => {
     logOutput += "  Version " + (idx + 1) + " at " + formatTimestamp(edit.timestamp) + ": " + edit.content + "\n";
   });
   logOutput += "  Current: " + message.content;
   console.log(logOutput);
+}
+
+export function getMessageContextMenuItems(props: { message: any }): React.ReactElement[] | null {
+  const message = props.message;
+  const key = getKey(message?.channel_id, message?.id);
+  if (!key) return null;
+
+  const deleted = deletedMessages.has(key);
+  const edits = messageEdits.get(key) ?? [];
+  if (!deleted && edits.length === 0) return null;
+
+  const items: React.ReactElement[] = [];
+
+  if (deleted) {
+    items.push(
+      React.createElement(contextMenu.MenuItem, {
+        id: "ml-remove-message",
+        key: "ml-remove-message",
+        label: "Remove Deleted Message",
+        color: "danger",
+        action: () => {
+          Dispatcher?.dispatch?.({
+            type: "MESSAGE_DELETE",
+            channelId: message.channel_id,
+            id: message.id,
+            _messageLogger_force: true
+          });
+        }
+      })
+    );
+  }
+
+  if (edits.length > 0) {
+    items.push(
+      React.createElement(contextMenu.MenuItem, {
+        id: "ml-view-history",
+        key: "ml-view-history",
+        label: "View Edit History (" + edits.length + ")",
+        action: () => openHistoryModal(message)
+      })
+    );
+    items.push(
+      React.createElement(contextMenu.MenuItem, {
+        id: "ml-clear-edits",
+        key: "ml-clear-edits",
+        label: "Clear Edit History",
+        color: "danger",
+        action: () => {
+          messageEdits.delete(key);
+          notify();
+        }
+      })
+    );
+  }
+
+  return items;
 }
 
 export const DELETED_MESSAGE_COUNT = () => ({
@@ -424,140 +442,40 @@ export const DELETED_MESSAGE_COUNT = () => ({
   ]
 });
 
-export function getMessageContextMenuItems(props: { message: any }): React.ReactElement[] | null {
-  try {
-    const msg = props.message;
-    if (!msg) return null;
-    if (!msg.deleted && (!msg.editHistory || msg.editHistory.length === 0)) return null;
+let installed = false;
 
-    const items: React.ReactElement[] = [];
+function install() {
+  if (installed) return;
+  installed = true;
 
-    if (msg.deleted) {
-      items.push(
-        React.createElement(contextMenu.MenuItem, {
-          id: "ml-toggle-delete-style",
-          key: "ml-toggle-delete-style",
-          label: "Hide Delete Highlight",
-          action: () => {
-            const el = document.getElementById("chat-messages-" + msg.channel_id + "-" + msg.id);
-            if (el) el.classList.remove("messagelogger-deleted");
-          }
-        })
-      );
-
-      items.push(
-        React.createElement(contextMenu.MenuItem, {
-          id: "ml-remove-message",
-          key: "ml-remove-message",
-          label: "Remove Deleted Message",
-          color: "danger",
-          action: () => {
-            getDispatcher()?.dispatch?.({
-              type: "MESSAGE_DELETE",
-              channelId: msg.channel_id,
-              id: msg.id,
-              mlDeleted: true
-            });
-          }
-        })
-      );
+  Dispatcher.addInterceptor((event: any) => {
+    switch (event?.type) {
+      case "MESSAGE_DELETE":
+        return handleDeleteEvent(event);
+      case "MESSAGE_DELETE_BULK":
+        return handleBulkDeleteEvent(event);
+      case "MESSAGE_UPDATE":
+        return handleMessageUpdateEvent(event);
+      default:
+        return false;
     }
+  });
 
-    if (msg.editHistory && msg.editHistory.length > 0) {
-      items.push(
-        React.createElement(contextMenu.MenuItem, {
-          id: "ml-view-history",
-          key: "ml-view-history",
-          label: "View Edit History (" + msg.editHistory.length + ")",
-          action: () => openHistoryModal(msg)
-        })
-      );
+  Messages.addBadge("messageLoggerDeletedBadge", DeletedBadge, "silent", true);
+  Messages.addAccessory("messageLoggerAccessory", MessageLoggerAccessory);
 
-      items.push(
-        React.createElement(contextMenu.MenuItem, {
-          id: "ml-clear-edits",
-          key: "ml-clear-edits",
-          label: "Clear Edit History",
-          color: "danger",
-          action: () => {
-            msg.editHistory = [];
-          }
-        })
-      );
-    }
+  contextMenu.addItem(
+    "message",
+    (props: any) => {
+      const items = getMessageContextMenuItems(props);
+      if (!items || items.length === 0) return null;
+      return React.createElement(contextMenu.MenuGroup, { key: "ml-group" }, ...items);
+    },
+    "copy-id"
+  );
 
-    return items.length > 0 ? items : null;
-  } catch (e) {
-    console.error("[MessageLogger] Error creating context menu items:", e);
-    return null;
-  }
+  installObserver();
+  document.body.dataset.mlDeleteStyle = getSetting("deleteStyle", "text");
 }
 
-contextMenu.addItem(
-  "message",
-  (props: any) => {
-    const msg = props?.message;
-    if (!msg) return null;
-    if (!msg.deleted && (!msg.editHistory || msg.editHistory.length === 0)) return null;
-
-    const items: React.ReactElement[] = [];
-
-    if (msg.deleted) {
-      items.push(
-        React.createElement(contextMenu.MenuItem, {
-          id: "ml-ctx-toggle-delete",
-          key: "ml-ctx-toggle-delete",
-          label: "Hide Delete Highlight",
-          action: () => {
-            const el = document.getElementById("chat-messages-" + msg.channel_id + "-" + msg.id);
-            if (el) el.classList.remove("messagelogger-deleted");
-          }
-        })
-      );
-      items.push(
-        React.createElement(contextMenu.MenuItem, {
-          id: "ml-ctx-remove-message",
-          key: "ml-ctx-remove-message",
-          label: "Remove Deleted Message",
-          color: "danger",
-          action: () => {
-            getDispatcher()?.dispatch?.({
-              type: "MESSAGE_DELETE",
-              channelId: msg.channel_id,
-              id: msg.id,
-              mlDeleted: true
-            });
-          }
-        })
-      );
-    }
-
-    if (msg.editHistory && msg.editHistory.length > 0) {
-      items.push(
-        React.createElement(contextMenu.MenuItem, {
-          id: "ml-ctx-view-history",
-          key: "ml-ctx-view-history",
-          label: "View Edit History (" + msg.editHistory.length + ")",
-          action: () => openHistoryModal(msg)
-        })
-      );
-      items.push(
-        React.createElement(contextMenu.MenuItem, {
-          id: "ml-ctx-clear-edits",
-          key: "ml-ctx-clear-edits",
-          label: "Clear Edit History",
-          color: "danger",
-          action: () => {
-            msg.editHistory = [];
-          }
-        })
-      );
-    }
-
-    if (items.length === 0) return null;
-    return React.createElement(contextMenu.MenuGroup, { key: "ml-ctx-group" }, ...items);
-  },
-  "copy-id"
-);
-
-console.log("[MessageLogger] Extension loaded. Delete style:", getSetting<string>("deleteStyle", "text"));
+install();

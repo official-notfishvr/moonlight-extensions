@@ -148,3 +148,25 @@ body[data-ml-delete-style="overlay"] .messagelogger-deleted h3 span {
   margin-left: 4px;
   color: var(--text-muted, #72767d);
 }
+
+.messagelogger-badge {
+  color: var(--status-danger, #f04747);
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.messagelogger-accessory {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.messagelogger-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--status-danger, #f04747);
+  font-size: 0.75rem;
+}

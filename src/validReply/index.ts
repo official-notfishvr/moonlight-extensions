@@ -13,6 +13,11 @@ export const patches: ExtensionWebExports["patches"] = [
 export const webpackModules: ExtensionWebExports["webpackModules"] = {
   main: {
     entrypoint: true,
-    dependencies: [{ ext: "spacepack", id: "spacepack" }]
+    dependencies: [
+      { ext: "spacepack", id: "spacepack" },
+      { id: "discord/Dispatcher" },
+      { id: "discord/modules/replies/ReferencedMessageStore" },
+      { id: "discord/stores/AuthenticationStore" }
+    ]
   }
 };

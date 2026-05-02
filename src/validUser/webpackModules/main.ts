@@ -1,53 +1,7 @@
-import spacepack from "@moonlight-mod/wp/spacepack_spacepack";
+import { AuthenticationStore, UserStore } from "@moonlight-mod/wp/common_stores";
+import Dispatcher from "@moonlight-mod/wp/discord/Dispatcher";
+import UserProfileStore from "@moonlight-mod/wp/discord/modules/user_profile/UserProfileStore";
 import React from "@moonlight-mod/wp/react";
-
-function findStore(name: string): any {
-  try {
-    const mappedId = `discord/stores/${name}`;
-    if (!(mappedId in (spacepack.modules ?? {})) && !(mappedId in (spacepack.cache ?? {}))) throw new Error();
-    const mapped = spacepack.require(mappedId);
-    const mappedExport = mapped?.default ?? mapped;
-    if (mappedExport?.getName?.() === name) return mappedExport;
-    for (const key of Object.keys(mappedExport ?? {})) {
-      if (mappedExport[key]?.getName?.() === name) return mappedExport[key];
-    }
-  } catch {}
-
-  try {
-    const mod = spacepack.findByCode(`"${name}"`)[0].exports;
-    if (mod?.default?.getName?.() === name) return mod.default;
-    if (mod?.getName?.() === name) return mod;
-    for (const key of Object.keys(mod ?? {})) {
-      if (mod[key]?.getName?.() === name) return mod[key];
-    }
-    return mod?.default ?? mod;
-  } catch {
-    return null;
-  }
-}
-
-let _UserStore: any = null;
-let _UserProfileStore: any = null;
-let _Dispatcher: any = null;
-
-function getDispatcher(): any {
-  if (_Dispatcher) return _Dispatcher;
-  try {
-    if (!("discord/Dispatcher" in (spacepack.modules ?? {})) && !("discord/Dispatcher" in (spacepack.cache ?? {}))) {
-      return null;
-    }
-    const mod = spacepack.require("discord/Dispatcher");
-    _Dispatcher = mod?.default ?? mod;
-  } catch {
-    _Dispatcher = null;
-  }
-  return _Dispatcher;
-}
-
-function ensureStores() {
-  if (!_UserStore) _UserStore = findStore("UserStore");
-  if (!_UserProfileStore) _UserProfileStore = findStore("UserProfileStore");
-}
 
 const UserFlags: Record<string, number> = {
   STAFF: 1 << 0,
@@ -152,16 +106,17 @@ const badges: Record<string, { id: string; description: string; icon: string; li
 };
 
 const fetching = new Set<string>();
-const queue: (() => Promise<void>)[] = [];
+const queue: Array<() => Promise<void>> = [];
 let processing = false;
 
 function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function processQueue() {
   if (processing) return;
   processing = true;
+
   while (queue.length > 0) {
     const task = queue.shift();
     if (task) {
@@ -169,23 +124,23 @@ async function processQueue() {
         await task();
       } catch {}
     }
+
     await sleep(300);
   }
+
   processing = false;
 }
 
 async function getToken(): Promise<string | null> {
   try {
-    const authStore = findStore("AuthenticationStore");
-    return authStore?.getToken?.() ?? null;
+    return AuthenticationStore?.getToken?.() ?? null;
   } catch {
     return null;
   }
 }
 
 async function getUser(id: string) {
-  ensureStores();
-  let userObj = _UserStore?.getUser?.(id);
+  let userObj = UserStore?.getUser?.(id);
   if (userObj) return userObj;
 
   const token = await getToken();
@@ -205,31 +160,32 @@ async function getUser(id: string) {
 
     const user = await resp.json();
 
-    getDispatcher()?.dispatch?.({
+    Dispatcher?.dispatch?.({
       type: "USER_UPDATE",
       user
     });
 
-    await getDispatcher()?.dispatch?.({
+    await Dispatcher?.dispatch?.({
       type: "USER_PROFILE_FETCH_FAILURE",
       userId: id
     });
 
-    userObj = _UserStore?.getUser?.(id);
+    userObj = UserStore?.getUser?.(id);
     if (!userObj) return null;
 
     const fakeBadges: any[] = [];
     for (const [key, flag] of Object.entries(UserFlags)) {
-      if (!isNaN(flag) && userObj.hasFlag?.(flag)) {
+      if (!Number.isNaN(flag) && userObj.hasFlag?.(flag)) {
         const badge = badges[key.toLowerCase()];
         if (badge) fakeBadges.push(badge);
       }
     }
+
     if (user.premium_type || (!user.bot && (user.banner || user.avatar?.startsWith?.("a_")))) {
       fakeBadges.push(badges.premium);
     }
 
-    const profile = _UserProfileStore?.getUserProfile?.(id);
+    const profile = UserProfileStore?.getUserProfile?.(id);
     if (profile) {
       profile.accentColor = user.accent_color;
       profile.badges = fakeBadges;
@@ -278,8 +234,7 @@ function MentionWrapper({ data, UserMention, RoleMention, parse, props }: any) {
           const id = match?.[1];
           if (!id || fetching.has(id)) return;
 
-          ensureStores();
-          if (_UserStore?.getUser?.(id)) {
+          if (UserStore?.getUser?.(id)) {
             setUserId(id);
             return;
           }
@@ -302,7 +257,7 @@ function MentionWrapper({ data, UserMention, RoleMention, parse, props }: any) {
                 }
               }
             });
-            processQueue();
+            void processQueue();
           };
 
           doFetch();
