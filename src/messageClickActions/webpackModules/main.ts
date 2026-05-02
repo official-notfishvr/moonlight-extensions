@@ -1,4 +1,4 @@
-import { AuthenticationStore, PermissionStore, UserStore } from "@moonlight-mod/wp/common_stores";
+import { AuthenticationStore, ChannelStore, PermissionStore, UserStore } from "@moonlight-mod/wp/common_stores";
 import { Permissions } from "@moonlight-mod/wp/discord/Constants";
 import { createToast } from "@moonlight-mod/wp/discord/design/components/Toast/web/Toast";
 import { showToast as showDiscordToast } from "@moonlight-mod/wp/discord/design/components/Toast/web/ToastAPI";
@@ -47,21 +47,9 @@ function findExport(...finds: string[]): any {
   }
 }
 
-function requireMapped(id: string): any {
-  try {
-    return spacepack.require(id)?.default ?? spacepack.require(id);
-  } catch {
-    return null;
-  }
-}
-
-let editMessageStore: any = null;
 let messageActions: any = null;
-let windowStore: any = null;
 
 function ensureStores() {
-  if (!editMessageStore) editMessageStore = requireMapped("discord/stores/EditMessageStore");
-  if (!windowStore) windowStore = requireMapped("discord/stores/WindowStore");
   if (!messageActions) messageActions = findExport("deleteMessage", "startEditMessage");
 }
 
@@ -115,6 +103,7 @@ function isModifierActive(modifier: Modifier): boolean {
 
 let singleClickTimer: ReturnType<typeof setTimeout> | null = null;
 let lastMouseDownTime = 0;
+let listenerInstalled = false;
 
 document.addEventListener("mousedown", () => {
   lastMouseDownTime = Date.now();
@@ -330,7 +319,6 @@ async function executeAction(action: ClickAction, msg: any, channel: any, event:
       break;
     case "EDIT":
       if (!isMe) return;
-      if (editMessageStore?.isEditing?.(channel.id, msg.id)) return;
       if (msg.state && msg.state !== "SENT") return;
 
       if (messageActions?.startEditMessage) {
@@ -358,7 +346,6 @@ async function executeAction(action: ClickAction, msg: any, channel: any, event:
       break;
     case "EDIT_REPLY":
       if (isMe) {
-        if (editMessageStore?.isEditing?.(channel.id, msg.id)) return;
         if (msg.state !== "SENT") return;
         messageActions?.startEditMessage?.(channel.id, msg.id, msg.content);
       } else {
@@ -416,12 +403,65 @@ function shouldIgnoreTarget(target: HTMLElement): boolean {
   );
 }
 
-export function onMessageClick(event: MouseEvent, props: any) {
+function getReactFiber(node: Element): any {
+  for (const key in node) {
+    if (key.startsWith("__reactFiber$") || key.startsWith("__reactInternalInstance$")) {
+      return (node as any)[key];
+    }
+  }
+
+  return null;
+}
+
+function getMessageRow(target: HTMLElement | null): HTMLElement | null {
+  if (!target) return null;
+  return target.closest?.('[id^="chat-messages-"]') ?? null;
+}
+
+function extractContextFromProps(value: any, visited = new Set<any>()): { message: any; channel: any } | null {
+  if (!value || typeof value !== "object") return null;
+  if (visited.has(value)) return null;
+  visited.add(value);
+
+  const message = (value as any).message;
+  const channel =
+    (value as any).channel ??
+    ((value as any).message?.channel_id
+      ? (ChannelStore?.getChannel?.((value as any).message.channel_id) ?? null)
+      : null);
+
+  if (message?.id && channel?.id) return { message, channel };
+
+  for (const key of Object.keys(value)) {
+    const child = (value as any)[key];
+    if (!child || typeof child !== "object") continue;
+    const result = extractContextFromProps(child, visited);
+    if (result) return result;
+  }
+
+  return null;
+}
+
+function getMessageContextFromEvent(event: MouseEvent): { message: any; channel: any } | null {
+  let target = event.target as HTMLElement | null;
+  if (target?.nodeType === Node.TEXT_NODE) target = target.parentElement as HTMLElement | null;
+
+  const row = getMessageRow(target);
+  if (!row) return null;
+
+  let fiber = getReactFiber(row);
+  while (fiber) {
+    const result = extractContextFromProps(fiber.memoizedProps);
+    if (result) return result;
+    fiber = fiber.return;
+  }
+
+  return null;
+}
+
+function handleMessageClick(event: MouseEvent, msg: any, channel: any) {
   try {
     if (event.button !== 0) return;
-
-    const msg = props?.message;
-    const channel = props?.channel;
     if (!msg || !channel) return;
 
     let target = event.target as HTMLElement;
@@ -505,9 +545,22 @@ export function onMessageClick(event: MouseEvent, props: any) {
   } catch {}
 }
 
+export function onMessageClick(event: MouseEvent) {
+  const context = getMessageContextFromEvent(event);
+  if (!context) return;
+  handleMessageClick(event, context.message, context.channel);
+}
+
+function install() {
+  if (listenerInstalled) return;
+  listenerInstalled = true;
+
+  document.addEventListener("click", onMessageClick, true);
+}
+
 document.addEventListener("keydown", keydown);
 document.addEventListener("keyup", keyup);
 window.addEventListener("blur", blur);
 
 ensureStores();
-windowStore?.addChangeListener?.(blur);
+install();
